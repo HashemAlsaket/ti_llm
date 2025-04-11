@@ -102,13 +102,13 @@ col3.metric("Avg Alpha Score", f"{avg_alpha:.2f}")
 st.subheader("🤖 Ask a Question")
 user_prompt = st.text_area("What would you like to know about this trading data?")
 
-if st.button("Ask the LLM"):
+if st.button("Ask the TI LLM Agent"):
     if user_prompt:
         # Use a shortened context for proof of concept
         sample_data = filtered_df.head(10).to_dict(orient="records")
         context_text = str(sample_data)
 
-        with st.spinner("Asking the LLM..."):
+        with st.spinner("Asking the TI LLM Agent..."):
             answer = ask_llm(user_prompt, context_text)
         st.success("LLM Response:")
         st.write(answer)
