@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 import sqlite3
 import os
 import time
-import base64
+import requests
+import json
 from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain.chains import create_sql_query_chain
@@ -14,99 +15,8 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import SystemMessage
 from langchain_community.utilities import SQLDatabase
 
-# --- TUDOR THEME SETUP ---
-# Tudor blue color scheme
-TUDOR_BLUE = "#0F4B81"
-TUDOR_LIGHT_BLUE = "#5A7EAF"
-TUDOR_DARK_BLUE = "#0A3258"
-TUDOR_BG = "#F0F2F6"
-TUDOR_WHITE = "#FFFFFF"
-TUDOR_ACCENT = "#D4E0F0"
-
-# Logo in base64 for embedding in the app
-TUDOR_LOGO = "data:image/png;base64,..."  # Replace with actual base64 string if needed
-
-# Custom CSS for Tudor theme
-def tudor_theme():
-    st.markdown(f"""
-    <style>
-    .stApp {{
-        background-color: {TUDOR_BG};
-    }}
-    .main .block-container {{
-        padding-top: 2rem;
-    }}
-    h1, h2, h3, h4, h5, h6 {{
-        color: {TUDOR_BLUE};
-    }}
-    .stButton>button {{
-        background-color: {TUDOR_BLUE};
-        color: white;
-        border-radius: 4px;
-        border: none;
-        padding: 0.5rem 1rem;
-        font-weight: 500;
-    }}
-    .stButton>button:hover {{
-        background-color: {TUDOR_DARK_BLUE};
-    }}
-    .stTabs [data-baseweb="tab-list"] {{
-        gap: 2px;
-    }}
-    .stTabs [data-baseweb="tab"] {{
-        background-color: {TUDOR_ACCENT};
-        color: {TUDOR_BLUE};
-        border-radius: 4px 4px 0 0;
-        padding: 0.5rem 1rem;
-        border: none;
-    }}
-    .stTabs [aria-selected="true"] {{
-        background-color: {TUDOR_BLUE};
-        color: white;
-    }}
-    .stSelectbox label, .stMultiselect label {{
-        color: {TUDOR_BLUE};
-        font-weight: 500;
-    }}
-    div[data-testid="stExpander"] details summary {{
-        background-color: {TUDOR_ACCENT};
-        color: {TUDOR_BLUE};
-        border-radius: 4px;
-    }}
-    div[data-testid="stExpander"] details[open] summary {{
-        background-color: {TUDOR_BLUE};
-        color: white;
-        border-radius: 4px 4px 0 0;
-    }}
-    div[data-testid="stExpander"] details {{
-        background-color: {TUDOR_WHITE};
-        border-radius: 4px;
-        border: 1px solid {TUDOR_ACCENT};
-    }}
-    .stDataFrame, .stTable {{
-        border: 1px solid {TUDOR_ACCENT};
-        border-radius: 4px;
-    }}
-    .stAlert {{
-        border-radius: 4px;
-    }}
-    .success {{
-        background-color: #D6EFC7;
-        border-left-color: #4CAF50;
-    }}
-    .info {{
-        background-color: {TUDOR_ACCENT};
-        border-left-color: {TUDOR_BLUE};
-    }}
-    .stTextArea textarea, .stTextInput input {{
-        border-radius: 4px;
-        border-color: {TUDOR_LIGHT_BLUE};
-    }}
-    .css-ch5dnh {{
-        color: {TUDOR_BLUE};
-    }}
-    </style>
-    """, unsafe_allow_html=True)
+# --- SETUP ---
+st.set_page_config(page_title="TI LLM Agent", layout="wide")
 
 # --- DATABASE SETUP ---
 DB_PATH = "finance_data.db"
@@ -174,9 +84,9 @@ def init_db():
     )
     ''')
     
-    # Create simulated_stock_data table
+    # Create real_stock_data table
     cursor.execute('''
-    CREATE TABLE IF NOT EXISTS simulated_stock_data (
+    CREATE TABLE IF NOT EXISTS real_stock_data (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ticker TEXT NOT NULL,
         timestamp TIMESTAMP NOT NULL,
@@ -184,21 +94,33 @@ def init_db():
         high REAL,
         low REAL,
         close REAL,
-        volume INTEGER
+        volume INTEGER,
+        last_refreshed TIMESTAMP
     )
     ''')
     
     conn.commit()
     conn.close()
 
-def db_has_data(table_name):
-    """Check if a specific table has data"""
+def db_is_empty():
+    """Check if database is empty"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-    count = cursor.fetchone()[0]
+    
+    # Check trades table
+    cursor.execute("SELECT COUNT(*) FROM trades")
+    trades_count = cursor.fetchone()[0]
+    
+    # Check economic_indicators table
+    cursor.execute("SELECT COUNT(*) FROM economic_indicators")
+    indicators_count = cursor.fetchone()[0]
+    
+    # Check historical_trades table
+    cursor.execute("SELECT COUNT(*) FROM historical_trades")
+    historical_trades_count = cursor.fetchone()[0]
+    
     conn.close()
-    return count > 0
+    return trades_count == 0 and indicators_count == 0 and historical_trades_count == 0
 
 def load_data_to_db():
     """Generate mock data and load into SQLite database"""
@@ -342,7 +264,7 @@ def load_data_to_db():
             "summary": "U.S. stocks entered correction territory following President Trump's announcement of sweeping new tariffs on imported goods, with small-cap stocks already in a bear market.",
             "timestamp": datetime(2025, 4, 5),
             "source": "US Bank",
-            "url": "https://www.usbank.com/example",
+            "url": "https://www.usbank.com/investing/financial-perspectives/market-news/is-a-market-correction-coming.html",
             "tickers": "SPY,QQQ,IWM",
             "sentiment": -0.7,
             "relevance": "Major Market Movement"
@@ -352,7 +274,7 @@ def load_data_to_db():
             "summary": "The International Monetary Fund has increased the probability of a US recession to 40%, citing tariff policies as pushing the global economy towards a significant slowdown.",
             "timestamp": datetime(2025, 4, 28),
             "source": "World Economic Forum",
-            "url": "https://www.weforum.org/example",
+            "url": "https://www.weforum.org/stories/2025/04/imf-raises-us-recession-risk-and-other-finance-news-to-know/",
             "tickers": "SPY,DIA,EEM",
             "sentiment": -0.5,
             "relevance": "Economic Outlook"
@@ -362,7 +284,7 @@ def load_data_to_db():
             "summary": "The Federal Reserve is likely to maintain current interest rates as it balances inflation concerns with economic growth prospects in an uncertain trade environment.",
             "timestamp": datetime(2025, 5, 1),
             "source": "Edward Jones",
-            "url": "https://www.edwardjones.com/example",
+            "url": "https://www.edwardjones.com/us-en/market-news-insights/stock-market-news/stock-market-weekly-update",
             "tickers": "TLT,IEF,BND",
             "sentiment": 0.1,
             "relevance": "Monetary Policy"
@@ -372,7 +294,7 @@ def load_data_to_db():
             "summary": "Technology and consumer discretionary companies, many of which rely on overseas suppliers, have been particularly affected by the recent market selloff.",
             "timestamp": datetime(2025, 4, 4),
             "source": "Schwab Market Perspective",
-            "url": "https://www.schwab.com/example",
+            "url": "https://www.schwab.com/learn/story/stock-market-outlook",
             "tickers": "XLK,QQQ,AAPL,MSFT",
             "sentiment": -0.6,
             "relevance": "Sector Impact"
@@ -382,7 +304,7 @@ def load_data_to_db():
             "summary": "The IMF maintains its global growth projection at 3.3% for 2025, with upward revisions for the United States offsetting downward adjustments elsewhere.",
             "timestamp": datetime(2025, 4, 15),
             "source": "IMF World Economic Outlook",
-            "url": "https://www.imf.org/example",
+            "url": "https://www.imf.org/en/Publications/WEO",
             "tickers": "ACWI,EFA,SPY",
             "sentiment": 0.3,
             "relevance": "Economic Outlook"
@@ -392,7 +314,7 @@ def load_data_to_db():
             "summary": "Financial institutions face increased pressure to ensure systems meet evolving industry standards as cybersecurity threats intensify.",
             "timestamp": datetime(2025, 4, 18),
             "source": "Genesis Global",
-            "url": "https://genesis.global/example",
+            "url": "https://genesis.global/report/2025-trends-in-financial-markets/",
             "tickers": "CIBR,HACK,FIN",
             "sentiment": -0.2,
             "relevance": "Industry Trend"
@@ -402,7 +324,7 @@ def load_data_to_db():
             "summary": "Sustainable funds saw record withdrawals in Q1, with US investors reducing exposure for the tenth consecutive quarter and Europeans becoming net sellers for the first time since 2018.",
             "timestamp": datetime(2025, 4, 25),
             "source": "World Economic Forum",
-            "url": "https://www.weforum.org/example",
+            "url": "https://www.weforum.org/stories/2025/04/imf-raises-us-recession-risk-and-other-finance-news-to-know/",
             "tickers": "ESGU,ESGD,ESGE",
             "sentiment": -0.4,
             "relevance": "Investment Trend"
@@ -412,17 +334,17 @@ def load_data_to_db():
             "summary": "Crude oil prices have risen sharply due to global supply chain disruptions and escalating geopolitical tensions, affecting energy sector stocks.",
             "timestamp": datetime(2025, 5, 5),
             "source": "Financial Market News",
-            "url": "https://example.com/news",
+            "url": "#",
             "tickers": "XOM,CVX,USO,XLE",
             "sentiment": 0.6,
             "relevance": "Commodity Impact"
         },
         {
-            "title": "Bitcoin Surpasses $100,000 as Cryptocurrency Adoption Accelerates",
-            "summary": "Bitcoin has reached a new all-time high above $100,000 as institutional adoption of cryptocurrencies continues to increase in 2025.",
+            "title": "Bitcoin Surpasses $100,000 as Coinbase Acquires Deribit",
+            "summary": "Bitcoin has jumped above $101,000 as cryptocurrency exchange Coinbase announced the acquisition of trading platform Deribit in a deal valued at $2.9 billion.",
             "timestamp": datetime(2025, 5, 7),
-            "source": "Crypto Market News",
-            "url": "https://example.com/crypto",
+            "source": "Yahoo Finance",
+            "url": "https://finance.yahoo.com",
             "tickers": "COIN,BTCUSD,GBTC",
             "sentiment": 0.8,
             "relevance": "Cryptocurrency"
@@ -431,97 +353,13 @@ def load_data_to_db():
             "title": "US Cargo Shipments Plummet by Up to 60% Since Early April",
             "summary": "Major retailers are warning of potential empty shelves and higher prices by mid-May due to a sharp decline in cargo shipments, with logistics and retail sectors facing possible layoffs.",
             "timestamp": datetime(2025, 4, 29),
-            "source": "Supply Chain Report",
-            "url": "https://example.com/supply",
+            "source": "World Economic Forum",
+            "url": "https://www.weforum.org/stories/2025/04/imf-raises-us-recession-risk-and-other-finance-news-to-know/",
             "tickers": "AMZN,WMT,TGT,UPS,FDX",
             "sentiment": -0.7,
             "relevance": "Supply Chain"
         }
     ]
-    
-    # Generate simulated stock data
-    simulated_stock_data = []
-    
-    # For each ticker, generate 60 days of data
-    for ticker in tickers:
-        # Set base price for each ticker
-        if ticker == 'AAPL':
-            base_price = 180
-        elif ticker == 'MSFT':
-            base_price = 350
-        elif ticker == 'GOOG':
-            base_price = 150
-        elif ticker == 'AMZN':
-            base_price = 170
-        elif ticker == 'NVDA':
-            base_price = 800
-        elif ticker in ['XOM', 'CVX', 'BP']:
-            base_price = 100
-        elif ticker in ['GOLD', 'NEM', 'RIO', 'VALE']:
-            base_price = 50
-        elif ticker == 'USO':
-            base_price = 75
-        elif ticker == 'GLD':
-            base_price = 195
-        elif ticker == 'SLV':
-            base_price = 25
-        
-        # Generate price trend
-        trend = np.random.choice(['up', 'down', 'flat', 'volatile'])
-        trend_strength = np.random.uniform(0.05, 0.2)  # 5-20% trend over the period
-        
-        # Generate data for each day
-        for day in range(60):
-            date = datetime(2025, 3, 1) + timedelta(days=day)
-            
-            # Apply trend
-            if trend == 'up':
-                multiplier = 1 + (day / 60) * trend_strength
-            elif trend == 'down':
-                multiplier = 1 - (day / 60) * trend_strength
-            elif trend == 'flat':
-                multiplier = 1 + np.random.uniform(-0.01, 0.01)
-            else:  # volatile
-                multiplier = 1 + np.random.uniform(-0.1, 0.1)
-            
-            # Apply tariff news impact for dates after April 2
-            if date > datetime(2025, 4, 2) and ticker in ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA']:
-                tariff_impact = 0.9  # 10% drop for tech stocks
-            elif date > datetime(2025, 4, 2) and ticker in ['XOM', 'CVX', 'BP']:
-                tariff_impact = 0.95  # 5% drop for energy stocks
-            else:
-                tariff_impact = 1.0
-            
-            # Calculate daily price
-            daily_price = base_price * multiplier * tariff_impact
-            
-            # Daily volatility
-            volatility = 0.015  # 1.5% average daily move
-            
-            # Calculate open, high, low, close
-            open_price = daily_price * (1 + np.random.uniform(-volatility/2, volatility/2))
-            close_price = daily_price * (1 + np.random.uniform(-volatility/2, volatility/2))
-            high_price = max(open_price, close_price) * (1 + np.random.uniform(0, volatility))
-            low_price = min(open_price, close_price) * (1 - np.random.uniform(0, volatility))
-            
-            # Volume (higher on volatile days)
-            base_volume = 1000000  # Base volume in shares
-            if abs(open_price - close_price) / open_price > volatility:
-                volume_multiplier = np.random.uniform(1.2, 2.0)  # Higher volume on volatile days
-            else:
-                volume_multiplier = np.random.uniform(0.8, 1.2)
-            
-            volume = int(base_volume * volume_multiplier)
-            
-            simulated_stock_data.append({
-                "ticker": ticker,
-                "timestamp": date,
-                "open": open_price,
-                "high": high_price,
-                "low": low_price,
-                "close": close_price,
-                "volume": volume
-            })
     
     # Insert data into database
     conn = sqlite3.connect(DB_PATH)
@@ -538,23 +376,10 @@ def load_data_to_db():
     news_df = pd.DataFrame(news_data)
     news_df.to_sql('market_news', conn, if_exists='append', index=False)
     
-    stock_df = pd.DataFrame(simulated_stock_data)
-    stock_df.to_sql('simulated_stock_data', conn, if_exists='append', index=False)
-    
     conn.commit()
     conn.close()
     
     return trades_df
-
-def check_and_load_additional_data():
-    """Check if additional data tables have data, and if not, load them"""
-    is_news_empty = not db_has_data('market_news')
-    is_stock_empty = not db_has_data('simulated_stock_data')
-    
-    if is_news_empty or is_stock_empty:
-        load_data_to_db()
-        return True
-    return False
 
 def get_data_from_db(ticker="All", model_group="All"):
     """Fetch data from SQLite database with optional filters"""
@@ -600,134 +425,210 @@ def get_db_schema():
     conn.close()
     return "\n\n".join(schema)
 
-def generate_market_insights():
-    """Generate random daily market insights based on simulated data"""
+def fetch_alpha_vantage_stock_data(ticker, api_key):
+    """Fetch real stock data from Alpha Vantage API"""
+    try:
+        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={ticker}&apikey={api_key}"
+        response = requests.get(url)
+        data = response.json()
+        
+        if "Error Message" in data:
+            return None, f"API Error: {data['Error Message']}"
+        
+        if "Time Series (Daily)" not in data:
+            return None, f"No data found for ticker {ticker}"
+        
+        # Extract the time series data
+        time_series = data["Time Series (Daily)"]
+        last_refreshed = data["Meta Data"]["3. Last Refreshed"]
+        
+        # Convert to DataFrame
+        df_data = []
+        for date, values in time_series.items():
+            df_data.append({
+                "ticker": ticker,
+                "timestamp": datetime.strptime(date, "%Y-%m-%d"),
+                "open": float(values["1. open"]),
+                "high": float(values["2. high"]),
+                "low": float(values["3. low"]),
+                "close": float(values["4. close"]),
+                "volume": int(values["5. volume"]),
+                "last_refreshed": datetime.strptime(last_refreshed, "%Y-%m-%d")
+            })
+        
+        # Sort by date
+        df = pd.DataFrame(df_data)
+        df = df.sort_values(by="timestamp", ascending=False)
+        
+        return df, None
+    except Exception as e:
+        return None, f"Error fetching stock data: {str(e)}"
+
+def fetch_alpha_vantage_news(api_key):
+    """Fetch financial news from Alpha Vantage API"""
+    try:
+        url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&apikey={api_key}"
+        response = requests.get(url)
+        data = response.json()
+        
+        if "Error Message" in data:
+            return None, f"API Error: {data['Error Message']}"
+        
+        if "feed" not in data:
+            return None, "No news data found"
+        
+        # Extract the news feed
+        news_feed = data["feed"]
+        
+        # Convert to DataFrame
+        df_data = []
+        for news in news_feed:
+            # Extract ticker symbols if available
+            tickers = ""
+            if "ticker_sentiment" in news and news["ticker_sentiment"]:
+                tickers = ",".join([item["ticker"] for item in news["ticker_sentiment"]])
+            
+            # Calculate overall sentiment
+            sentiment = 0.0
+            if "overall_sentiment_score" in news:
+                sentiment = float(news["overall_sentiment_score"])
+            
+            df_data.append({
+                "title": news.get("title", "No Title"),
+                "summary": news.get("summary", ""),
+                "timestamp": datetime.strptime(news.get("time_published", "20250101T000000")[:8], "%Y%m%d"),
+                "source": news.get("source", "Unknown"),
+                "url": news.get("url", ""),
+                "tickers": tickers,
+                "sentiment": sentiment,
+                "relevance": "API Source"
+            })
+        
+        # Create DataFrame
+        df = pd.DataFrame(df_data)
+        
+        return df, None
+    except Exception as e:
+        return None, f"Error fetching news data: {str(e)}"
+
+def store_real_data_in_db(stock_df=None, news_df=None):
+    """Store real data from APIs in the database"""
     conn = sqlite3.connect(DB_PATH)
     
-    # Get most recent stock data
-    recent_stock_df = pd.read_sql(
-        "SELECT ticker, close, timestamp FROM simulated_stock_data " +
-        "WHERE timestamp = (SELECT MAX(timestamp) FROM simulated_stock_data)",
-        conn
-    )
+    try:
+        if stock_df is not None and not stock_df.empty:
+            stock_df.to_sql('real_stock_data', conn, if_exists='append', index=False)
+        
+        if news_df is not None and not news_df.empty:
+            news_df.to_sql('market_news', conn, if_exists='append', index=False)
+        
+        conn.commit()
+        success = True
+        error = None
+    except Exception as e:
+        conn.rollback()
+        success = False
+        error = str(e)
+    finally:
+        conn.close()
     
-    # Get previous day's close
-    prev_day_stock_df = pd.read_sql(
-        "SELECT ticker, close, timestamp FROM simulated_stock_data " +
-        "WHERE timestamp = (SELECT MAX(timestamp) FROM simulated_stock_data WHERE timestamp < (SELECT MAX(timestamp) FROM simulated_stock_data))",
-        conn
-    )
-    
-    # Get latest news sentiment
-    news_df = pd.read_sql(
-        "SELECT sentiment FROM market_news ORDER BY timestamp DESC LIMIT 5",
-        conn
-    )
-    
-    conn.close()
-    
-    # Merge to calculate daily returns
-    stock_df = recent_stock_df.merge(
-        prev_day_stock_df,
-        on='ticker',
-        suffixes=('', '_prev')
-    )
-    stock_df['daily_return'] = (stock_df['close'] - stock_df['close_prev']) / stock_df['close_prev'] * 100
-    
-    # Calculate market summary
-    top_performer = stock_df.loc[stock_df['daily_return'].idxmax()]
-    worst_performer = stock_df.loc[stock_df['daily_return'].idxmin()]
-    avg_return = stock_df['daily_return'].mean()
-    
-    # Calculate average sentiment
-    avg_sentiment = news_df['sentiment'].mean() if not news_df.empty else 0
-    
-    # Generate market insight text
-    if avg_return > 1.0:
-        market_state = "strongly bullish"
-    elif avg_return > 0.2:
-        market_state = "mildly bullish"
-    elif avg_return > -0.2:
-        market_state = "relatively flat"
-    elif avg_return > -1.0:
-        market_state = "mildly bearish"
-    else:
-        market_state = "strongly bearish"
-    
-    # Generate sentiment text
-    if avg_sentiment > 0.3:
-        sentiment_text = "positive"
-    elif avg_sentiment > -0.3:
-        sentiment_text = "neutral"
-    else:
-        sentiment_text = "negative"
-    
-    date_str = recent_stock_df['timestamp'].iloc[0].strftime('%Y-%m-%d') if not recent_stock_df.empty else "today"
-    
-    insight_text = f"Market Insight for {date_str}: The market is {market_state} with an average return of {avg_return:.2f}%. "
-    insight_text += f"The top performer is {top_performer['ticker']} (+{top_performer['daily_return']:.2f}%), "
-    insight_text += f"while {worst_performer['ticker']} is the worst performer ({worst_performer['daily_return']:.2f}%). "
-    insight_text += f"News sentiment is generally {sentiment_text}."
-    
-    return insight_text, top_performer['ticker'], worst_performer['ticker'], avg_return
-
-# --- TUDOR LOGO DISPLAY FUNCTION ---
-def display_tudor_logo():
-    st.markdown(f"""
-    <div style="background-color:{TUDOR_BLUE}; padding:10px; border-radius:5px; margin-bottom:20px; 
-        display:flex; align-items:center; justify-content:center;">
-        <img src="https://raw.githubusercontent.com/streamlit/streamlit/develop/examples/data/logo.png" 
-            style="width:40px; margin-right:10px;">
-        <span style="color:white; font-size:24px; font-weight:bold;">TUDOR INVESTMENTS</span>
-    </div>
-    """, unsafe_allow_html=True)
+    return success, error
 
 # --- LOGIN FLOW ---
 def login():
     st.session_state["authenticated"] = False
-    
-    # Apply Tudor theme for login page
-    tudor_theme()
-    
-    # Display Tudor logo
-    display_tudor_logo()
-    
-    st.markdown(f"""
-    <div style="display:flex; justify-content:center; margin-top:50px;">
-        <div style="background-color:{TUDOR_WHITE}; border-radius:10px; padding:30px; 
-                box-shadow:0 4px 6px rgba(0,0,0,0.1); width:400px;">
-            <h2 style="color:{TUDOR_BLUE}; text-align:center; margin-bottom:20px;">
-                Sign in to Tudor LLM Agent
-            </h2>
-            <p style="text-align:center; margin-bottom:30px; color:{TUDOR_DARK_BLUE};">
-                Please enter your credentials to continue
-            </p>
-    """, unsafe_allow_html=True)
 
     with st.form("Login"):
-        st.text_input("Username", key="username")
-        st.text_input("Password", type="password", key="password")
-        
-        col1, col2, col3 = st.columns([1,2,1])
-        with col2:
-            submitted = st.form_submit_button("Sign In", use_container_width=True)
+        st.write("🔐 Please log in to continue")
+        user = st.text_input("Username")
+        pw = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
 
         if submitted:
-            if st.session_state["username"] == st.secrets["credentials"]["username"] and st.session_state["password"] == st.secrets["credentials"]["password"]:
+            if user == st.secrets["credentials"]["username"] and pw == st.secrets["credentials"]["password"]:
                 st.session_state["authenticated"] = True
             else:
                 st.error("Invalid credentials")
-
-    st.markdown("""
-    </div></div>
-    """, unsafe_allow_html=True)
 
 if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
     login()
     st.stop()
 
-# Apply Tudor theme
-tudor_theme()
+st.title("📊 TI LLM Agent Prototype")
+
+# --- INITIALIZE DATABASE ---
+init_db()
+
+# Load sample data if database is empty
+if db_is_empty():
+    with st.spinner("Loading initial data..."):
+        load_data_to_db()
+        st.success("Sample data loaded successfully!")
+
+# --- INITIALIZE CLIENTS ---
+openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+langchain_llm = ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"], model="gpt-4")
+
+# --- SETUP LANGCHAIN SQL DATABASE ---
+db_url = f"sqlite:///{DB_PATH}"
+db = SQLDatabase.from_uri(db_url)
+
+# --- ALPHA VANTAGE API KEY ---
+alpha_vantage_api_key = st.secrets.get("ALPHA_VANTAGE_API_KEY", "demo")
+
+# --- FETCH REAL DATA SECTION ---
+st.sidebar.header("📈 Fetch Real Data")
+
+fetch_real_data = st.sidebar.checkbox("Fetch Real Market Data", value=False)
+
+if fetch_real_data:
+    with st.sidebar.expander("Alpha Vantage API Settings"):
+        # Option to input API key directly
+        use_custom_key = st.checkbox("Use Custom API Key", value=False)
+        if use_custom_key:
+            custom_api_key = st.text_input("Alpha Vantage API Key", "")
+            if custom_api_key:
+                alpha_vantage_api_key = custom_api_key
+        
+        fetch_stock_data = st.checkbox("Fetch Stock Data", value=True)
+        fetch_news_data = st.checkbox("Fetch News Data", value=True)
+        
+        if fetch_stock_data:
+            stock_ticker = st.text_input("Stock Ticker Symbol", "MSFT")
+        
+        if st.button("Fetch Data"):
+            with st.spinner("Fetching data from Alpha Vantage..."):
+                stock_success = False
+                news_success = False
+                
+                if fetch_stock_data:
+                    stock_df, stock_error = fetch_alpha_vantage_stock_data(stock_ticker, alpha_vantage_api_key)
+                    if stock_df is not None:
+                        stock_success = True
+                        st.sidebar.success(f"Successfully fetched stock data for {stock_ticker}")
+                        
+                        # Store in database
+                        store_success, store_error = store_real_data_in_db(stock_df=stock_df)
+                        if not store_success:
+                            st.sidebar.error(f"Failed to store stock data: {store_error}")
+                    else:
+                        st.sidebar.error(stock_error)
+                
+                if fetch_news_data:
+                    news_df, news_error = fetch_alpha_vantage_news(alpha_vantage_api_key)
+                    if news_df is not None:
+                        news_success = True
+                        st.sidebar.success(f"Successfully fetched {len(news_df)} news items")
+                        
+                        # Store in database
+                        store_success, store_error = store_real_data_in_db(news_df=news_df)
+                        if not store_success:
+                            st.sidebar.error(f"Failed to store news data: {store_error}")
+                    else:
+                        st.sidebar.error(news_error)
+                
+                if stock_success or news_success:
+                    st.sidebar.info("Data successfully stored in database. You can now query it with the LLM agent.")
 
 # --- LLM QUERY FUNCTIONS WITH THINKING LOG ---
 def ask_direct_llm(prompt, context, thinking_container):
@@ -913,84 +814,32 @@ def ask_enhanced_sql_llm(prompt, filtered_df, thinking_container):
         "sql_results": sql_response.get("results", pd.DataFrame()) if "error" not in sql_response else None
     }
 
-# --- INITIALIZE CLIENTS AND DATABASE ---
-st.title("")  # Empty title to create space for custom header
-
-# Display Tudor logo and header
-display_tudor_logo()
-
-# --- INITIALIZE DATABASE ---
-init_db()
-
-# Check if trades data exists
-if not db_has_data('trades'):
-    with st.spinner("Loading initial trades data..."):
-        load_data_to_db()
-        st.success("Sample data loaded successfully!")
-else:
-    # If trades exist but other data doesn't, load additional data
-    with st.spinner("Checking for additional data..."):
-        if check_and_load_additional_data():
-            st.success("Additional market data loaded successfully!")
-
-# --- INITIALIZE CLIENTS ---
-openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-langchain_llm = ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"], model="gpt-4")
-
-# --- SETUP LANGCHAIN SQL DATABASE ---
-db_url = f"sqlite:///{DB_PATH}"
-db = SQLDatabase.from_uri(db_url)
-
 # --- SIDEBAR FILTERS ---
-with st.sidebar:
-    st.markdown(f"""
-    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin-bottom:15px;">
-        <h3 style="color:white; margin:0; font-size:18px;">Filter Settings</h3>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    ticker_options = ["All"]
-    model_options = ["All"]
+st.sidebar.header("🔍 Filter Trades")
+ticker_options = ["All"]
+model_options = ["All"]
 
-    # Get unique values from the database
-    conn = sqlite3.connect(DB_PATH)
-    ticker_options += [row[0] for row in conn.execute("SELECT DISTINCT ticker FROM trades ORDER BY ticker").fetchall()]
-    model_options += [row[0] for row in conn.execute("SELECT DISTINCT model_group FROM trades ORDER BY model_group").fetchall()]
-    conn.close()
+# Get unique values from the database
+conn = sqlite3.connect(DB_PATH)
+ticker_options += [row[0] for row in conn.execute("SELECT DISTINCT ticker FROM trades ORDER BY ticker").fetchall()]
+model_options += [row[0] for row in conn.execute("SELECT DISTINCT model_group FROM trades ORDER BY model_group").fetchall()]
+conn.close()
 
-    ticker = st.selectbox("Select Ticker", ticker_options)
-    model = st.selectbox("Select Model Group", model_options)
-    
-    st.markdown(f"""
-    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
-        <h3 style="color:white; margin:0; font-size:18px;">LLM Query Settings</h3>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    query_method = st.radio(
-        "Analysis Method",
-        ["Simple (Direct)", "SQL-Based", "Enhanced SQL"],
-        help="Choose how the LLM will process your query"
-    )
+ticker = st.sidebar.selectbox("Select Ticker", ticker_options)
+model = st.sidebar.selectbox("Select Model Group", model_options)
+
+# --- QUERY APPROACH SELECTION ---
+query_method = st.sidebar.radio(
+    "LLM Query Method",
+    ["Simple (Direct)", "SQL-Based", "Enhanced SQL"],
+    help="Choose how the LLM will process your query"
+)
 
 # --- GET FILTERED DATA ---
 filtered_df = get_data_from_db(ticker, model)
 
-# --- Generate Daily Market Insight ---
-insight_text, top_ticker, bottom_ticker, market_return = generate_market_insights()
-
 # --- DISPLAY DATA ---
-# Display market insight in a stylish card
-st.markdown(f"""
-<div style="background-color:{TUDOR_ACCENT}; padding:15px; border-radius:5px; 
-    border-left:5px solid {TUDOR_BLUE}; margin-bottom:20px;">
-    <h3 style="color:{TUDOR_BLUE}; margin-top:0;">Daily Market Insight</h3>
-    <p style="color:{TUDOR_DARK_BLUE};">{insight_text}</p>
-</div>
-""", unsafe_allow_html=True)
-
-# Create styled tabs
-data_tab, news_tab, metrics_tab = st.tabs(["📊 Trade Data", "📰 Market News", "📈 Market Data"])
+data_tab, news_tab, metrics_tab = st.tabs(["📊 Trade Data", "📰 Market News", "📈 Metrics"])
 
 with data_tab:
     st.dataframe(filtered_df, use_container_width=True)
@@ -1023,99 +872,40 @@ with metrics_tab:
     total_position = filtered_df['position'].sum()
     avg_alpha = filtered_df['alpha_score'].mean()
     
-    # Style metrics with Tudor colors
-    pnl_color = TUDOR_BLUE if total_pnl >= 0 else "#D32F2F"
-    position_color = TUDOR_BLUE if total_position >= 0 else "#D32F2F"
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total PnL", f"${total_pnl:,.0f}")
+    col2.metric("Net Position", f"${total_position:,.0f}")
+    col3.metric("Avg Alpha Score", f"{avg_alpha:.2f}")
     
-    metrics_cols = st.columns(3)
+    # Show real stock data if available
+    conn = sqlite3.connect(DB_PATH)
+    real_stock_df = pd.read_sql("SELECT * FROM real_stock_data ORDER BY timestamp DESC LIMIT 30", conn)
+    conn.close()
     
-    with metrics_cols[0]:
-        st.markdown(f"""
-        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:5px; text-align:center; 
-            border:1px solid {TUDOR_ACCENT}; height:120px;">
-            <p style="color:{TUDOR_DARK_BLUE}; font-size:14px; margin:0;">Total PnL</p>
-            <h2 style="color:{pnl_color}; margin:10px 0;">${total_pnl:,.0f}</h2>
-            <p style="color:{TUDOR_DARK_BLUE}; font-size:12px; opacity:0.7; margin:0;">
-                All portfolios, filtered view
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with metrics_cols[1]:
-        st.markdown(f"""
-        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:5px; text-align:center; 
-            border:1px solid {TUDOR_ACCENT}; height:120px;">
-            <p style="color:{TUDOR_DARK_BLUE}; font-size:14px; margin:0;">Net Position</p>
-            <h2 style="color:{position_color}; margin:10px 0;">${total_position:,.0f}</h2>
-            <p style="color:{TUDOR_DARK_BLUE}; font-size:12px; opacity:0.7; margin:0;">
-                Current exposure
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with metrics_cols[2]:
-        st.markdown(f"""
-        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:5px; text-align:center; 
-            border:1px solid {TUDOR_ACCENT}; height:120px;">
-            <p style="color:{TUDOR_DARK_BLUE}; font-size:14px; margin:0;">Avg Alpha Score</p>
-            <h2 style="color:{TUDOR_BLUE}; margin:10px 0;">{avg_alpha:.2f}</h2>
-            <p style="color:{TUDOR_DARK_BLUE}; font-size:12px; opacity:0.7; margin:0;">
-                Model performance metric
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Show simulated stock data
-    st.markdown(f"""
-    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
-        <h3 style="color:white; margin:0; font-size:18px;">Stock Performance Analysis</h3>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Allow user to select ticker for chart
-    stock_ticker = st.selectbox("Select Stock for Chart", ticker_options[1:])  # Skip "All"
-    
-    if stock_ticker:
-        conn = sqlite3.connect(DB_PATH)
-        stock_df = pd.read_sql(f"SELECT * FROM simulated_stock_data WHERE ticker = '{stock_ticker}' ORDER BY timestamp", conn)
-        conn.close()
+    if not real_stock_df.empty:
+        st.subheader("Real Stock Data (Last 30 Days)")
         
-        if not stock_df.empty:
+        # Group by ticker
+        tickers = real_stock_df['ticker'].unique()
+        
+        for ticker in tickers:
+            ticker_data = real_stock_df[real_stock_df['ticker'] == ticker].sort_values('timestamp')
+            
             # Calculate daily returns
-            stock_df['daily_return'] = stock_df['close'].pct_change() * 100
+            ticker_data['daily_return'] = ticker_data['close'].pct_change() * 100
             
-            # Set custom chart configuration
-            st.markdown(f"""
-            <style>
-            [data-testid="stChart"] {{
-                border: 1px solid {TUDOR_ACCENT};
-                border-radius: 5px;
-                padding: 10px;
-                background-color: white;
-            }}
-            </style>
-            """, unsafe_allow_html=True)
+            st.subheader(f"{ticker} Stock Performance")
             
-            # Create two columns for price and volume charts
-            price_col, volume_col = st.columns(2)
+            # Create two columns for price and volume
+            price_col, return_col = st.columns(2)
             
             with price_col:
-                st.markdown(f"<h4 style='color:{TUDOR_BLUE}; text-align:center;'>{stock_ticker} Price</h4>", unsafe_allow_html=True)
-                st.line_chart(stock_df.set_index('timestamp')['close'], use_container_width=True)
+                st.line_chart(ticker_data.set_index('timestamp')['close'], use_container_width=True)
             
-            with volume_col:
-                st.markdown(f"<h4 style='color:{TUDOR_BLUE}; text-align:center;'>{stock_ticker} Volume</h4>", unsafe_allow_html=True)
-                st.bar_chart(stock_df.set_index('timestamp')['volume'], use_container_width=True)
-            
-            # Daily returns chart
-            st.markdown(f"<h4 style='color:{TUDOR_BLUE}; text-align:center;'>{stock_ticker} Daily Returns (%)</h4>", unsafe_allow_html=True)
-            st.bar_chart(stock_df.set_index('timestamp')['daily_return'], use_container_width=True)
-            
-            # Show recent data as table
-            st.markdown(f"<h4 style='color:{TUDOR_BLUE};'>Recent Price Data</h4>", unsafe_allow_html=True)
-            st.dataframe(stock_df.tail(10)[['timestamp', 'open', 'high', 'low', 'close', 'volume']])
-        else:
-            st.info(f"No data available for {stock_ticker}")
+            with return_col:
+                st.bar_chart(ticker_data.set_index('timestamp')['daily_return'], use_container_width=True)
+    else:
+        st.info("No real stock data available. Use the 'Fetch Real Data' option in the sidebar to get live market data.")
 
 # --- TEST PROMPTS ---
 test_prompts = [
@@ -1141,22 +931,23 @@ test_prompts = [
     "What was the largest single trade by value in the historical trades data?"
 ]
 
-# Add news-related prompts
-news_prompts = [
-    "Summarize the recent market news sentiment and its potential impact on our positions",
-    "What sectors are being mentioned most frequently in recent negative news?",
-    "Is there a correlation between news sentiment and market performance for our tickers?",
-    "Based on recent news, which of our positions might be most at risk?",
-    "How might the recent tariff news impact our technology sector exposure?"
-]
-test_prompts.extend(news_prompts)
+# Add real news-related prompts if we have news data
+conn = sqlite3.connect(DB_PATH)
+news_count = conn.execute("SELECT COUNT(*) FROM market_news").fetchone()[0]
+conn.close()
+
+if news_count > 0:
+    news_prompts = [
+        "Summarize the recent market news sentiment and its potential impact on our positions",
+        "What sectors are being mentioned most frequently in recent negative news?",
+        "Is there a correlation between news sentiment and market performance for our tickers?",
+        "Based on recent news, which of our positions might be most at risk?",
+        "How might the recent tariff news impact our technology sector exposure?"
+    ]
+    test_prompts.extend(news_prompts)
 
 # --- LLM QUERY INTERFACE ---
-st.markdown(f"""
-<div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
-    <h3 style="color:white; margin:0; font-size:18px;">LLM Financial Analyst</h3>
-</div>
-""", unsafe_allow_html=True)
+st.subheader("🤖 Ask a Question")
 
 # Add dropdown for test prompts
 use_test_prompt = st.checkbox("Use a test prompt", value=False)
@@ -1170,79 +961,58 @@ else:
 # Create a placeholder for the agent thinking log
 thinking_log = st.empty()
 
-query_col1, query_col2 = st.columns([3, 1])
-with query_col2:
-    if st.button("Ask the Agent", use_container_width=True):
-        if user_prompt:
-            # Clear previous thinking log
-            thinking_container = st.expander("💡 Agent Thinking Process", expanded=True)
-            
-            with st.spinner("Processing your question..."):
-                if query_method == "Simple (Direct)":
-                    # Use the original direct approach
-                    sample_data = filtered_df.head(10).to_dict(orient="records")
-                    context_text = str(sample_data)
-                    answer = ask_direct_llm(user_prompt, context_text, thinking_container)
+if st.button("Ask the TI LLM Agent"):
+    if user_prompt:
+        # Clear previous thinking log
+        thinking_container = st.expander("💡 Agent Thinking Process", expanded=True)
+        
+        with st.spinner("Processing your question..."):
+            if query_method == "Simple (Direct)":
+                # Use the original direct approach
+                sample_data = filtered_df.head(10).to_dict(orient="records")
+                context_text = str(sample_data)
+                answer = ask_direct_llm(user_prompt, context_text, thinking_container)
+                
+                st.success("LLM Response:")
+                st.write(answer)
+                
+            elif query_method == "SQL-Based":
+                # Use the SQL-based approach
+                result = ask_sql_llm(user_prompt, thinking_container)
+                
+                if "error" in result:
+                    st.error(f"Error: {result['error']}")
+                else:
+                    st.success("LLM Response:")
+                    st.write(result["explanation"])
                     
-                    st.markdown(f"""
-                    <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:5px; 
-                        border-left:5px solid {TUDOR_BLUE}; margin:20px 0;">
-                        <h3 style="color:{TUDOR_BLUE}; margin-top:0;">LLM Analysis</h3>
-                        <p style="color:{TUDOR_DARK_BLUE};">{answer}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                elif query_method == "SQL-Based":
-                    # Use the SQL-based approach
-                    result = ask_sql_llm(user_prompt, thinking_container)
-                    
-                    if "error" in result:
-                        st.error(f"Error: {result['error']}")
-                    else:
-                        st.markdown(f"""
-                        <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:5px; 
-                            border-left:5px solid {TUDOR_BLUE}; margin:20px 0;">
-                            <h3 style="color:{TUDOR_BLUE}; margin-top:0;">LLM Analysis</h3>
-                            <p style="color:{TUDOR_DARK_BLUE};">{result["explanation"]}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        with st.expander("View SQL Query"):
-                            st.code(result["sql"], language="sql")
-                        
-                        with st.expander("View Raw Results"):
-                            st.dataframe(result["results"])
-                    
-                else:  # Enhanced SQL
-                    # Use the enhanced SQL approach
-                    result = ask_enhanced_sql_llm(user_prompt, filtered_df, thinking_container)
-                    
-                    st.markdown(f"""
-                    <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:5px; 
-                        border-left:5px solid {TUDOR_BLUE}; margin:20px 0;">
-                        <h3 style="color:{TUDOR_BLUE}; margin-top:0;">LLM Analysis</h3>
-                        <p style="color:{TUDOR_DARK_BLUE};">{result["response"]}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    with st.expander("View Technical Details"):
-                        st.subheader("SQL Query")
+                    with st.expander("View SQL Query"):
                         st.code(result["sql"], language="sql")
-                        
-                        if result["sql_results"] is not None:
-                            st.subheader("SQL Results")
-                            st.dataframe(result["sql_results"])
-                        else:
-                            st.warning("SQL query execution failed")
-        else:
-            st.warning("Please enter a question.")
+                    
+                    with st.expander("View Raw Results"):
+                        st.dataframe(result["results"])
+                
+            else:  # Enhanced SQL
+                # Use the enhanced SQL approach
+                result = ask_enhanced_sql_llm(user_prompt, filtered_df, thinking_container)
+                
+                st.success("LLM Response:")
+                st.write(result["response"])
+                
+                with st.expander("View Technical Details"):
+                    st.subheader("SQL Query")
+                    st.code(result["sql"], language="sql")
+                    
+                    if result["sql_results"] is not None:
+                        st.subheader("SQL Results")
+                        st.dataframe(result["sql_results"])
+                    else:
+                        st.warning("SQL query execution failed")
+    else:
+        st.warning("Please enter a question.")
 
 # --- ADD DATA UPLOAD FUNCTIONALITY ---
-st.markdown(f"""
-<div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
-    <h3 style="color:white; margin:0; font-size:18px;">Data Management</h3>
-</div>
-""", unsafe_allow_html=True)
+st.subheader("📤 Upload Additional Data")
 
 uploaded_file = st.file_uploader("Upload CSV file with trading data", type=["csv"])
 if uploaded_file is not None:
@@ -1264,24 +1034,15 @@ if uploaded_file is not None:
             # Preview data
             st.dataframe(upload_df.head())
             
-            upload_col1, upload_col2 = st.columns([3, 1])
-            with upload_col2:
-                if st.button("Confirm Upload", use_container_width=True):
-                    with st.spinner("Uploading data..."):
-                        # Insert data into database
-                        conn = sqlite3.connect(DB_PATH)
-                        upload_df.to_sql('trades', conn, if_exists='append', index=False)
-                        conn.commit()
-                        conn.close()
-                        
-                        st.success(f"Successfully uploaded {len(upload_df)} records to the database!")
-                        st.experimental_rerun()
+            if st.button("Confirm Upload to Database"):
+                with st.spinner("Uploading data..."):
+                    # Insert data into database
+                    conn = sqlite3.connect(DB_PATH)
+                    upload_df.to_sql('trades', conn, if_exists='append', index=False)
+                    conn.commit()
+                    conn.close()
+                    
+                    st.success(f"Successfully uploaded {len(upload_df)} records to the database!")
+                    st.experimental_rerun()
     except Exception as e:
         st.error(f"Error processing file: {e}")
-
-# --- FOOTER ---
-st.markdown(f"""
-<div style="background-color:{TUDOR_BLUE}; padding:15px; border-radius:5px; margin-top:30px; text-align:center;">
-    <p style="color:white; margin:0;">Tudor Investments LLM Agent © 2025</p>
-</div>
-""", unsafe_allow_html=True)
