@@ -286,6 +286,7 @@ def get_data_from_db(ticker="All", model_group="All"):
                 "You are an expert SQL query generator for a financial analytics system. "
                 "Generate a precise, efficient SQL query to answer the user's question based on the database schema provided. "
                 "The query should be well-optimized and follow best practices. "
+                "All SQL queries must conform to SQLite3 syntax. Do not use MySQL, PostgreSQL, or other dialect-specific functions (e.g., DATE_SUB, INTERVAL, NOW()). Use SQLite functions such as date('now', '-5 months'), strftime(), and CURRENT_TIMESTAMP."
                 "Return ONLY the SQLLite3 query, with no additional explanation."
             )),
             ("human", """
