@@ -577,7 +577,7 @@ def get_data_from_db(ticker="All", model_group="All"):
                 "The query should be well-optimized and follow best practices. "
                 "All SQL queries must conform to SQLite3 syntax. "
                 "Return ONLY the SQL query, with no additional explanation."
-                "If you are asked about making a prediction, performing a regression, future information etc., just pull the relevant past data, the CALCULATION AGENT will perform the calculation on that data"
+                "If you are asked about making a prediction, performing a regression, future information etc., just pull the relevant past data (DO NOT ATTEMPT TO PULL FUTURE DATA), the CALCULATION AGENT will perform the calculation on that data"
             )),
             ("human", """
             Database Schema:
@@ -650,7 +650,7 @@ def execute_sql_query(prompt, thinking_container):
             "All SQL queries must conform to SQLite3 syntax. Do not use MySQL, PostgreSQL, or other dialect-specific functions. "
             "Use SQLite functions such as date(), strftime(), and CURRENT_TIMESTAMP for date manipulation. "
             "Return ONLY the SQL query, with no additional explanation."
-                "If you are asked about making a prediction, performing a regression, future information etc., just pull the relevant past data, the CALCULATION AGENT will perform the calculation on that data"
+                "If you are asked about making a prediction, performing a regression, future information etc., just pull the relevant past data (DO NOT ATTEMPT TO PULL FUTURE DATA), the CALCULATION AGENT will perform the calculation on that data"
         )),
         ("human", """
         Database Schema:
