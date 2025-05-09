@@ -12,3 +12,4 @@ pydantic>=2.0.0
 requests>=2.31.0
 matplotlib==3.10
 seaborn==0.13.2
+scikit-learn==1.6.1
