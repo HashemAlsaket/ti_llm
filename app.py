@@ -1,10 +1,16 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import sqlite3
 import os
 import time
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
+import plotly.express as px
+import plotly.graph_objects as go
 from langchain_openai import ChatOpenAI
 from langchain.chains import create_sql_query_chain
 from langchain_core.prompts import ChatPromptTemplate
@@ -319,9 +325,10 @@ def load_data_to_db():
     economic_data = []
     for indicator in indicators:
         for region in regions:
-            # Create time series of monthly values
-            for month in range(1, 5):
+            # Create time series of weekly values for the past 12 weeks
+            for week in range(12):
                 base_value = 0
+                week_date = datetime.now() - timedelta(weeks=week)
                 
                 # Set base values for different indicators
                 if indicator == 'GDP Growth':
@@ -335,7 +342,8 @@ def load_data_to_db():
                 elif indicator == 'Oil Price':
                     base_value = np.random.uniform(70, 90)
                 elif indicator == 'Gold Price':
-                    base_value = np.random.uniform(1800, 2100)
+                    # Create a trend for gold prices
+                    base_value = 1800 + (week * 10) + np.random.uniform(-20, 20)
                 elif indicator == 'Consumer Confidence':
                     base_value = np.random.uniform(95, 110)
                 
@@ -347,7 +355,7 @@ def load_data_to_db():
                 
                 economic_data.append({
                     "indicator_name": indicator,
-                    "timestamp": datetime(2025, month, 15),
+                    "timestamp": week_date,
                     "value": current_value,
                     "region": region,
                     "previous_value": previous_value
@@ -426,6 +434,84 @@ def load_data_to_db():
             "interest_rate_sensitivity": interest_rate_sensitivity
         })
     
+    # Generate simulated stock data for the past 12 weeks
+    simulated_stock_data = []
+    today = datetime.now()
+    
+    for ticker in tickers:
+        # Set base price based on ticker
+        if ticker == 'AAPL':
+            base_price = 180
+        elif ticker == 'MSFT':
+            base_price = 350
+        elif ticker == 'GOOG':
+            base_price = 150
+        elif ticker == 'AMZN':
+            base_price = 170
+        elif ticker == 'NVDA':
+            base_price = 800
+        elif ticker in ['XOM', 'CVX', 'BP']:
+            base_price = 100
+        elif ticker in ['GOLD', 'NEM', 'RIO', 'VALE']:
+            base_price = 50
+        elif ticker == 'USO':
+            base_price = 70
+        elif ticker == 'SLV':
+            base_price = 25
+        else:
+            base_price = 100
+        
+        # Generate daily data for the past 12 weeks
+        for days_ago in range(84):  # 12 weeks * 7 days
+            date = today - timedelta(days=days_ago)
+            
+            # Add some trend and seasonality
+            trend = np.sin(days_ago / 30) * 10
+            seasonality = np.sin(days_ago / 7) * 5
+            
+            # Apply specific trends for certain tickers
+            if ticker == 'MSFT':
+                # Microsoft has a rising trend
+                trend = days_ago * 0.2
+            elif ticker == 'GOOG':
+                # Google has a cyclical pattern
+                trend = np.sin(days_ago / 20) * 20
+            elif ticker == 'GOLD':
+                # Gold has a generally rising trend
+                trend = days_ago * 0.1 + np.sin(days_ago / 15) * 5
+            
+            daily_volatility = np.random.uniform(0.01, 0.03)
+            price_noise = np.random.normal(0, daily_volatility * base_price)
+            
+            adjusted_price = base_price + trend + seasonality + price_noise
+            
+            # Calculate day's OHLC
+            open_price = adjusted_price
+            high_price = adjusted_price * (1 + np.random.uniform(0, 0.02))
+            low_price = adjusted_price * (1 - np.random.uniform(0, 0.02))
+            close_price = adjusted_price * (1 + np.random.normal(0, 0.01))
+            
+            # Ensure high is highest and low is lowest
+            high_price = max(open_price, close_price, high_price)
+            low_price = min(open_price, close_price, low_price)
+            
+            # Volume varies by day of week (higher on Mon/Fri)
+            day_of_week = date.weekday()
+            volume_factor = 1.2 if day_of_week in [0, 4] else 1.0
+            volume = int(np.random.uniform(500000, 5000000) * volume_factor)
+            
+            # Skip weekends for realism
+            if day_of_week < 5:  # Monday to Friday only
+                simulated_stock_data.append({
+                    "ticker": ticker,
+                    "timestamp": date,
+                    "open": open_price,
+                    "high": high_price,
+                    "low": low_price,
+                    "close": close_price,
+                    "volume": volume
+                })
+    
     # Insert data into database
     conn = sqlite3.connect(DB_PATH)
     
@@ -440,6 +526,26 @@ def load_data_to_db():
     
     positions_df = pd.DataFrame(positions_data)
     positions_df.to_sql('positions', conn, if_exists='append', index=False)
+    
+    simulated_stock_df = pd.DataFrame(simulated_stock_data)
+    simulated_stock_df.to_sql('simulated_stock_data', conn, if_exists='append', index=False)
+    
+    # Copy simulated data to real_stock_data as well
+    real_stock_data = []
+    for _, row in simulated_stock_df.iterrows():
+        real_stock_data.append({
+            "ticker": row['ticker'],
+            "timestamp": row['timestamp'],
+            "open": row['open'],
+            "high": row['high'],
+            "low": row['low'],
+            "close": row['close'],
+            "volume": row['volume'],
+            "last_refreshed": datetime.now()
+        })
+    
+    real_stock_df = pd.DataFrame(real_stock_data)
+    real_stock_df.to_sql('real_stock_data', conn, if_exists='append', index=False)
     
     conn.commit()
     conn.close()
@@ -833,7 +939,12 @@ if st.button("Ask the TI LLM Agent", help="Click to analyze your question with S
             if "error" in result:
                 st.error(f"Error: {result['error']}")
             else:
-                # Custom styled results box with Tudor theme
+                # Check if this is a visualization query with a chart
+                if "chart" in result:
+                    # Display chart in main content area
+                    display_chart_in_main_area(result["chart"], st)
+                
+                # Display the explanation
                 st.markdown(f"""
                 <div style="background-color: #E5EBF3; border: 2px solid #0A50A1; 
                      padding: 20px; border-radius: 5px; margin-bottom: 20px;">
@@ -842,14 +953,16 @@ if st.button("Ask the TI LLM Agent", help="Click to analyze your question with S
                 </div>
                 """, unsafe_allow_html=True)
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    with st.expander("View SQL Query"):
-                        st.code(result["sql"], language="sql")
-                
-                with col2:
-                    with st.expander("View Raw Results"):
-                        st.dataframe(result["results"])
+                # For standard SQL queries, show the SQL and raw results
+                if "sql" in result and result["sql"] not in ["specialized_visualization_query", "specialized_prediction_query", "specialized_historical_query"]:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        with st.expander("View SQL Query"):
+                            st.code(result["sql"], language="sql")
+                    
+                    with col2:
+                        with st.expander("View Raw Results"):
+                            st.dataframe(result["results"])
     else:
         st.warning("Please enter a question.")
 
