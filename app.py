@@ -644,7 +644,7 @@ metric_style = """
 st.markdown(metric_style, unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Total PnL", f"${total_pnl:,.0f}")
+# col1.metric("Total PnL", f"${total_pnl:,.0f}")
 col2.metric("Net Position", f"${total_position:,.0f}")
 col3.metric("Avg Alpha Score", f"{avg_alpha:.2f}")
 
