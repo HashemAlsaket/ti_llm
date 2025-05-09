@@ -20,6 +20,10 @@ DB_PATH = "finance_data.db"
 
 def init_db():
     """Initialize SQLite database and create tables if they don't exist"""
+    # Check if database file exists, and if so, delete it to ensure a fresh schema
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
+        
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -150,8 +154,9 @@ def load_data_to_db():
     
     trades_data = []
     for _ in range(1000):
+        # Fix for numpy.random.choice dimensionality error
         chosen_index = np.random.randint(0, len(all_tickers))
-        ticker, asset_class = all_tickers[chosen_pair]
+        ticker, asset_class = all_tickers[chosen_index]
         
         # Assign sectors based on ticker (simplified logic)
         if ticker in ['AAPL', 'MSFT', 'GOOG', 'NVDA']:
@@ -169,12 +174,13 @@ def load_data_to_db():
         elif ticker in ['XLRE']:
             sector = 'Real Estate'
         else:
-            sector = np.random.choice(sectors)
+            # Fix for numpy.random.choice
+            sector = sectors[np.random.randint(0, len(sectors))]
         
         # Generate the trade data
         trades_data.append({
             "ticker": ticker,
-            "model_group": np.random.choice(model_groups),
+            "model_group": model_groups[np.random.randint(0, len(model_groups))],
             "timestamp": datetime(2024, np.random.randint(1, 5), np.random.randint(1, 29)),
             "position": np.random.uniform(-2000000, 2000000),
             "pnl": np.random.uniform(-200000, 300000),
@@ -321,7 +327,9 @@ def load_data_to_db():
             # Current month's value
             if is_central_bank:
                 # Central banks tend to move in 0.25% increments
-                rate_change = np.random.choice([-0.25, 0, 0, 0, 0.25])
+                # Use numpy.random.choice with a 1D array
+                rate_options = np.array([-0.25, 0, 0, 0, 0.25])
+                rate_change = rate_options[np.random.randint(0, len(rate_options))]
             else:
                 # Market rates move more continuously
                 rate_change = np.random.normal(0, 0.1)
