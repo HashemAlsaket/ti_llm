@@ -13,6 +13,68 @@ from langchain_core.messages import SystemMessage
 from langchain_community.utilities import SQLDatabase
 import logging
 
+# --- SETUP ---
+st.set_page_config(page_title="TI LLM Agent", layout="wide")
+
+# --- CUSTOM THEME ---
+# Define Tudor Investment theme colors based on logo
+tudor_blue = "#0A50A1"  # Primary blue from Tudor logo
+tudor_light_blue = "#3B7EC9"
+tudor_dark_blue = "#063773"
+background_color = "#FFFFFF"
+accent_color = "#E5EBF3"
+
+# Custom CSS with Tudor theme
+st.markdown(f"""
+<style>
+    .stApp {{
+        background-color: {background_color};
+    }}
+    .stButton>button {{
+        background-color: {tudor_blue};
+        color: white;
+    }}
+    .stButton>button:hover {{
+        background-color: {tudor_light_blue};
+    }}
+    .st-cb, .st-bq, .st-an, .st-av, .st-at {{
+        border-color: {tudor_blue};
+    }}
+    div[data-testid="stMetricValue"] {{
+        color: {tudor_blue};
+        font-weight: bold;
+    }}
+    div[data-testid="stExpander"] {{
+        border-left-color: {tudor_blue} !important;
+    }}
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 24px;
+    }}
+    .stTabs [data-baseweb="tab"] {{
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: {accent_color};
+        border-radius: 4px 4px 0 0;
+        gap: 1px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }}
+    .stTabs [aria-selected="true"] {{
+        background-color: {tudor_blue};
+        color: white;
+    }}
+    h1, h2, h3, h4, h5, h6 {{
+        color: {tudor_dark_blue};
+    }}
+    .stSidebar .stButton>button {{
+        width: 100%;
+    }}
+    a {{
+        color: {tudor_blue};
+    }}
+</style>
+""", unsafe_allow_html=True)
+
 # Define the detailed schema as a constant at the top level for reuse
 DETAILED_SCHEMA = """
 Table: trades
@@ -112,6 +174,65 @@ def init_db():
         price REAL NOT NULL,
         model_group TEXT,
         trade_id TEXT
+    )
+    ''')
+    
+    # Create market_news table if it doesn't exist
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS market_news (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        summary TEXT,
+        timestamp TIMESTAMP NOT NULL,
+        source TEXT,
+        url TEXT,
+        tickers TEXT,
+        sentiment REAL,
+        relevance TEXT
+    )
+    ''')
+    
+    # Create simulated_stock_data table if it doesn't exist
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS simulated_stock_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker TEXT NOT NULL,
+        timestamp TIMESTAMP NOT NULL,
+        open REAL NOT NULL,
+        high REAL NOT NULL,
+        low REAL NOT NULL,
+        close REAL NOT NULL,
+        volume INTEGER
+    )
+    ''')
+    
+    # Create real_stock_data table if it doesn't exist
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS real_stock_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker TEXT NOT NULL,
+        timestamp TIMESTAMP NOT NULL,
+        open REAL NOT NULL,
+        high REAL NOT NULL,
+        low REAL NOT NULL,
+        close REAL NOT NULL,
+        volume INTEGER,
+        last_refreshed TIMESTAMP
+    )
+    ''')
+    
+    # Create positions table if it doesn't exist
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS positions (
+        timestamp TIMESTAMP NOT NULL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        position REAL NOT NULL,
+        pnl REAL NOT NULL,
+        alpha_score REAL NOT NULL,
+        volatility REAL NOT NULL,
+        sector TEXT,
+        commodity_exposure REAL,
+        interest_rate_sensitivity REAL
     )
     ''')
     
@@ -271,6 +392,40 @@ def load_data_to_db():
                 "trade_id": f"TRD-{np.random.randint(10000, 99999)}"
             })
     
+    # Generate positions data (based on the CSV data)
+    positions_data = []
+    for i in range(1, 110):  # Using the provided CSV data range
+        timestamp = datetime(2025, np.random.randint(1, 5), np.random.randint(1, 29))
+        sector = np.random.choice(['Technology', 'Energy', 'Materials'])
+        
+        # Determine commodity exposure based on sector
+        if sector == 'Energy':
+            commodity_exposure = np.random.uniform(0.6, 0.9)
+        elif sector == 'Materials':
+            commodity_exposure = np.random.uniform(0.5, 0.8)
+        else:
+            commodity_exposure = np.random.uniform(0, 0.3)
+        
+        # Determine interest rate sensitivity
+        if sector == 'Financial Services':
+            interest_rate_sensitivity = np.random.uniform(0.7, 0.95)
+        elif sector == 'Technology':
+            interest_rate_sensitivity = np.random.uniform(0.4, 0.7)
+        else:
+            interest_rate_sensitivity = np.random.uniform(0.1, 0.5)
+        
+        positions_data.append({
+            "timestamp": timestamp,
+            "id": i,
+            "position": np.random.uniform(-2000000, 2000000),
+            "pnl": np.random.uniform(-150000, 200000),
+            "alpha_score": np.random.normal(0, 1),
+            "volatility": np.random.uniform(0.1, 0.5),
+            "sector": sector,
+            "commodity_exposure": commodity_exposure,
+            "interest_rate_sensitivity": interest_rate_sensitivity
+        })
+    
     # Insert data into database
     conn = sqlite3.connect(DB_PATH)
     
@@ -282,6 +437,9 @@ def load_data_to_db():
     
     historical_df = pd.DataFrame(historical_trades)
     historical_df.to_sql('historical_trades', conn, if_exists='append', index=False)
+    
+    positions_df = pd.DataFrame(positions_data)
+    positions_df.to_sql('positions', conn, if_exists='append', index=False)
     
     conn.commit()
     conn.close()
@@ -311,22 +469,8 @@ def get_data_from_db(ticker="All", model_group="All"):
                 "You are an expert SQL query generator for a financial analytics system. "
                 "Generate a precise, efficient SQL query to answer the user's question based on the database schema provided. "
                 "The query should be well-optimized and follow best practices. "
-                "All SQL queries must conform to SQLite3 syntax. Do not use MySQL, PostgreSQL, or other dialect-specific functions (e.g., DATE_SUB, INTERVAL, NOW()). Use SQLite functions such as date('now', '-5 months'), strftime(), and CURRENT_TIMESTAMP."
-                "Return ONLY the query, with no additional explanation."
-                """E.G. -- Valid SQLite date manipulation
-SELECT 
-    T.trade_date, 
-    T.action, 
-    T.quantity,
-FROM 
-    historical_trades T
-WHERE 
-    T.ticker = 'MSFT'
-ORDER BY 
-    T.trade_date;"""
-"""DO NOT EVER ATTEMPT TO USE COLUMNS THAT YOU DO NOT SEE UNDER THE TABLE IN THE SCHEMA PROVIDED TO YOU. IT WILL NOT WORK."""
-"""NEVER TRY TO UNION"""
-"""RETURN ONLY THE QUERY"""
+                "All SQL queries must conform to SQLite3 syntax. "
+                "Return ONLY the SQL query, with no additional explanation."
             )),
             ("human", """
             Database Schema:
@@ -349,9 +493,10 @@ ORDER BY
         df = pd.read_sql(sql_query, conn)
         
     except Exception as e:
-        # Fallback to manual query construction if LLM query fails
-        print(f"LLM query generation failed: {e}. Using fallback query.")
+        # Log the error
+        logging.error(f"LLM query generation failed: {str(e)}. Using fallback query.")
         
+        # Fallback to manual query construction if LLM query fails
         query = "SELECT * FROM trades"
         params = []
         
@@ -372,73 +517,6 @@ ORDER BY
     conn.close()
     return df
 
-# This function is removed as we're now using the detailed static schema
-# def get_db_schema():
-#     """Get the database schema as a string"""
-#     conn = sqlite3.connect(DB_PATH)
-#     cursor = conn.cursor()
-#     
-#     # Get table names
-#     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-#     tables = cursor.fetchall()
-#     
-#     schema = []
-#     for table in tables:
-#         table_name = table[0]
-#         cursor.execute(f"PRAGMA table_info({table_name});")
-#         columns = cursor.fetchall()
-#         
-#         col_defs = [f"{col[1]} {col[2]}" for col in columns]
-#         schema.append(f"Table: {table_name}\nColumns: {', '.join(col_defs)}")
-#     
-#     conn.close()
-#     return "\n\n".join(schema)
-
-# --- LOGIN FLOW ---
-def login():
-    st.session_state["authenticated"] = False
-
-    with st.form("Login"):
-        st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
-        st.write("🔐 Please log in to continue")
-        user = st.text_input("Username")
-        pw = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
-
-        if submitted:
-            if user == st.secrets["credentials"]["username"] and pw == st.secrets["credentials"]["password"]:
-                st.session_state["authenticated"] = True
-            else:
-                st.error("Invalid credentials")
-
-if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
-    login()
-    st.stop()
-
-# --- HEADER WITH LOGO ---
-col1, col2 = st.columns([1, 5])
-with col1:
-    st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
-with col2:
-    st.title("📊 TI LLM Agent Prototype")
-
-# --- INITIALIZE DATABASE ---
-init_db()
-
-# Load sample data if database is empty
-if db_is_empty():
-    with st.spinner("Loading initial data..."):
-        load_data_to_db()
-        st.success("Sample data loaded successfully!")
-
-# --- INITIALIZE LANGCHAIN LLM ---
-langchain_llm = ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"], model="gpt-4")
-
-# --- SETUP LANGCHAIN SQL DATABASE ---
-db_url = f"sqlite:///{DB_PATH}"
-db = SQLDatabase.from_uri(db_url)
-
-# --- SQL LLM QUERY FUNCTION ---
 def execute_sql_query(prompt, thinking_container):
     """Use LangChain to convert natural language to SQL and execute, with thinking log"""
     # Custom styled sections with Tudor theme
@@ -454,31 +532,17 @@ def execute_sql_query(prompt, thinking_container):
         <h4 style="color: #0A50A1;">📋 Database Schema</h4>
     </div>
     """, unsafe_allow_html=True)
-    # thinking_container.code(DETAILED_SCHEMA, language="sql")
+    thinking_container.code(DETAILED_SCHEMA, language="sql")
     
     # Create a custom prompt template that includes the detailed schema
     sql_generation_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content=(
-                "You are an expert SQL query generator for a financial analytics system. "
-                "Generate a precise, efficient SQL query to answer the user's question based on the database schema provided. "
-                "The query should be well-optimized and follow best practices. "
-                "All SQL queries must conform to SQLite3 syntax. Do not use MySQL, PostgreSQL, or other dialect-specific functions (e.g., DATE_SUB, INTERVAL, NOW()). Use SQLite functions such as date('now', '-5 months'), strftime(), and CURRENT_TIMESTAMP."
-                "Return ONLY the SQLLite3 query, with no additional explanation."
-                """E.G. -- Valid SQLite date manipulation
-SELECT 
-    T.trade_date, 
-    T.action, 
-    T.quantity, 
-    T.price AS trade_price,
-FROM 
-    historical_trades T
-WHERE 
-    T.ticker = 'MSFT'
-ORDER BY 
-    T.trade_date;"""
-"""DO NOT EVER ATTEMPT TO USE COLUMNS THAT YOU DO NOT SEE UNDER THE TABLE IN THE SCHEMA PROVIDED TO YOU. IT WILL NOT WORK."""
-"""NEVER TRY TO UNION"""
-"""RETURN ONLY THE QUERY"""
+        SystemMessage(content=(
+            "You are an expert SQL query generator for a financial analytics system. "
+            "Generate a precise, efficient SQL query to answer the user's question based on the database schema provided. "
+            "The query should be well-optimized and follow best practices. "
+            "All SQL queries must conform to SQLite3 syntax. Do not use MySQL, PostgreSQL, or other dialect-specific functions. "
+            "Use SQLite functions such as date(), strftime(), and CURRENT_TIMESTAMP for date manipulation. "
+            "Return ONLY the SQL query, with no additional explanation."
         )),
         ("human", """
         Database Schema:
@@ -581,12 +645,72 @@ ORDER BY
             "error": str(e),
             "sql": "Error generating or executing SQL"
         }
-    except Exception as e:
-        thinking_container.error(f"❌ **Error:** {str(e)}")
-        return {
-            "error": str(e),
-            "sql": "Error generating or executing SQL"
-        }
+
+# --- LOGIN FLOW ---
+def login():
+    st.session_state["authenticated"] = False
+
+    with st.form("Login"):
+        st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
+        st.write("🔐 Please log in to continue")
+        user = st.text_input("Username")
+        pw = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
+
+        if submitted:
+            # Use appropriate credential checking based on your setup
+            # This is a simplified example
+            try:
+                if user == st.secrets["credentials"]["username"] and pw == st.secrets["credentials"]["password"]:
+                    st.session_state["authenticated"] = True
+                else:
+                    st.error("Invalid credentials")
+            except Exception:
+                # Fallback for local development without secrets
+                if user == "admin" and pw == "password":
+                    st.session_state["authenticated"] = True
+                else:
+                    st.error("Invalid credentials")
+
+# Check authentication state
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    login()
+    st.stop()
+
+# --- HEADER WITH LOGO ---
+col1, col2 = st.columns([1, 5])
+with col1:
+    st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
+with col2:
+    st.title("📊 TI LLM Agent Prototype")
+
+# --- INITIALIZE DATABASE ---
+init_db()
+
+# Load sample data if database is empty
+if db_is_empty():
+    with st.spinner("Loading initial data..."):
+        load_data_to_db()
+        st.success("Sample data loaded successfully!")
+
+# --- INITIALIZE LANGCHAIN LLM ---
+try:
+    langchain_llm = ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"], model="gpt-4")
+except Exception:
+    # Fallback for local development
+    openai_api_key = st.sidebar.text_input("OpenAI API Key", type="password")
+    if openai_api_key:
+        langchain_llm = ChatOpenAI(api_key=openai_api_key, model="gpt-4")
+    else:
+        st.warning("Please enter your OpenAI API key in the sidebar to continue.")
+        st.stop()
+
+# --- SETUP LANGCHAIN SQL DATABASE ---
+db_url = f"sqlite:///{DB_PATH}"
+db = SQLDatabase.from_uri(db_url)
 
 # --- SIDEBAR FILTERS ---
 st.sidebar.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=80)
@@ -615,9 +739,9 @@ st.markdown("""
 st.dataframe(filtered_df, use_container_width=True)
 
 # --- SUMMARY METRICS ---
-# total_pnl = filtered_df['pnl'].sum()
-total_position = filtered_df['position'].sum()
-avg_alpha = filtered_df['alpha_score'].mean()
+total_pnl = filtered_df['pnl'].sum() if 'pnl' in filtered_df.columns else 0
+total_position = filtered_df['position'].sum() if 'position' in filtered_df.columns else 0
+avg_alpha = filtered_df['alpha_score'].mean() if 'alpha_score' in filtered_df.columns else 0
 
 # Define custom metric styles
 metric_style = """
@@ -644,7 +768,7 @@ metric_style = """
 st.markdown(metric_style, unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns(3)
-# col1.metric("Total PnL", f"${total_pnl:,.0f}")
+col1.metric("Total PnL", f"${total_pnl:,.0f}")
 col2.metric("Net Position", f"${total_position:,.0f}")
 col3.metric("Avg Alpha Score", f"{avg_alpha:.2f}")
 
@@ -691,9 +815,7 @@ else:
 # Filter context prompt
 filtered_context = f"Current filter: Ticker={ticker}, Model Group={model}"
 
-if st.button("Ask the TI LLM Agent", 
-                 help="Click to analyze your question with SQL", 
-                 use_container_width=True):
+if st.button("Ask the TI LLM Agent", help="Click to analyze your question with SQL", use_container_width=True):
     if user_prompt:
         # Create thinking log container
         thinking_container = st.expander("💡 Agent Thinking Process", expanded=True)
@@ -758,8 +880,7 @@ if uploaded_file is not None:
             # Preview data
             st.dataframe(upload_df.head())
             
-            if st.button("Confirm Upload to Database", 
-                     use_container_width=True):
+            if st.button("Confirm Upload to Database", use_container_width=True):
                 with st.spinner("Uploading data..."):
                     # Insert data into database
                     conn = sqlite3.connect(DB_PATH)
