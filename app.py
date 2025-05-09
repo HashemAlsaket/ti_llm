@@ -167,22 +167,20 @@ def load_data_to_db():
     np.random.seed(42)
     
     # --- TRADES DATA ---
-    # Enhanced tickers list including various asset classes
+    # Enhanced tickers list including various asset classes - REDUCED
     tickers = {
-        'Equities': ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA', 'JNJ', 'PG', 'V', 'JPM', 'BAC'],
-        'ETFs': ['SPY', 'QQQ', 'VTI', 'GLD', 'SLV', 'USO', 'XLE', 'XLF', 'XLRE', 'LIT'],
-        'Bonds': ['TLT', 'IEF', 'SHY', 'LQD', 'HYG', 'MUB', 'IGIB', 'GOVT', 'BND', 'AGG'],
-        'Forex': ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'USD/CHF', 'NZD/USD', 'EUR/GBP', 'EUR/JPY', 'GBP/JPY'],
-        'Crypto': ['BTC/USD', 'ETH/USD', 'XRP/USD', 'SOL/USD', 'ADA/USD', 'DOT/USD', 'AVAX/USD', 'LINK/USD', 'MATIC/USD', 'UNI/USD']
+        'Equities': ['AAPL', 'MSFT', 'GOOG'],
+        'ETFs': ['SPY', 'QQQ'],
+        'Bonds': ['TLT', 'IEF'],
+        'Forex': ['EUR/USD', 'GBP/USD'],
+        'Crypto': ['BTC/USD', 'ETH/USD']
     }
     
-    # Enhanced model groups
-    model_groups = ['Macro Alpha', 'Q1 Equity', 'Commodities Signal', 'Rates Momentum', 'Technical Breakout', 
-                   'Value Factor', 'Growth Momentum', 'Volatility Arb', 'Multi-strat', 'Dividend Yield']
+    # Enhanced model groups - REDUCED
+    model_groups = ['Macro Alpha', 'Q1 Equity', 'Commodities Signal', 'Rates Momentum']
     
-    # Enhanced sectors
-    sectors = ['Technology', 'Healthcare', 'Financials', 'Consumer Discretionary', 'Communication Services',
-              'Energy', 'Materials', 'Industrials', 'Utilities', 'Real Estate', 'Consumer Staples']
+    # Enhanced sectors - REDUCED
+    sectors = ['Technology', 'Healthcare', 'Financials', 'Energy', 'Materials']
     
     # Flatten tickers for random selection
     all_tickers = []
@@ -191,26 +189,16 @@ def load_data_to_db():
             all_tickers.append((ticker, asset_class))
     
     trades_data = []
-    for _ in range(1000):
-        # Fix for numpy.random.choice dimensionality error
+    # REDUCED number of trades from 1000 to 50
+    for _ in range(50):
         chosen_index = np.random.randint(0, len(all_tickers))
         ticker, asset_class = all_tickers[chosen_index]
         
         # Assign sectors based on ticker (simplified logic)
-        if ticker in ['AAPL', 'MSFT', 'GOOG', 'NVDA']:
+        if ticker in ['AAPL', 'MSFT', 'GOOG']:
             sector = 'Technology'
-        elif ticker in ['JPM', 'BAC', 'V'] or asset_class == 'Bonds':
+        elif ticker in ['JPM', 'BAC'] or asset_class == 'Bonds':
             sector = 'Financials'
-        elif ticker in ['JNJ', 'PG']:
-            sector = 'Healthcare'
-        elif ticker in ['AMZN']:
-            sector = 'Consumer Discretionary'
-        elif ticker in ['XLE', 'USO'] or 'USD' in ticker:
-            sector = 'Energy'
-        elif ticker in ['GLD', 'SLV', 'LIT']:
-            sector = 'Materials'
-        elif ticker in ['XLRE']:
-            sector = 'Real Estate'
         else:
             # Fix for numpy.random.choice
             sector = sectors[np.random.randint(0, len(sectors))]
@@ -219,7 +207,7 @@ def load_data_to_db():
         trades_data.append({
             "ticker": ticker,
             "model_group": model_groups[np.random.randint(0, len(model_groups))],
-            "timestamp": datetime(2024, np.random.randint(1, 5), np.random.randint(1, 29)),
+            "timestamp": datetime(2024, np.random.randint(1, 3), np.random.randint(1, 15)),
             "position": np.random.uniform(-2000000, 2000000),
             "pnl": np.random.uniform(-200000, 300000),
             "alpha_score": np.random.normal(0, 1),
@@ -228,66 +216,31 @@ def load_data_to_db():
             "asset_class": asset_class
         })
     
-    # --- COMMODITIES DATA ---
+    # --- COMMODITIES DATA --- REDUCED
     commodities = [
-        # Oil and Energy
+        # Reduced to just a few commodities
         ('Crude Oil WTI', 'CL=F', 'Energy'),
-        ('Brent Crude', 'BZ=F', 'Energy'),
-        ('Natural Gas', 'NG=F', 'Energy'),
-        ('Heating Oil', 'HO=F', 'Energy'),
-        ('Gasoline RBOB', 'RB=F', 'Energy'),
-        
-        # Metals
         ('Gold', 'GC=F', 'Precious Metals'),
-        ('Silver', 'SI=F', 'Precious Metals'),
-        ('Platinum', 'PL=F', 'Precious Metals'),
-        ('Palladium', 'PA=F', 'Precious Metals'),
-        ('Copper', 'HG=F', 'Base Metals'),
-        ('Aluminum', 'ALI=F', 'Base Metals'),
-        ('Zinc', 'ZNC=F', 'Base Metals'),
-        ('Nickel', 'NI=F', 'Base Metals'),
-        
-        # Agricultural
-        ('Corn', 'ZC=F', 'Agriculture'),
-        ('Soybeans', 'ZS=F', 'Agriculture'),
-        ('Wheat', 'ZW=F', 'Agriculture'),
-        ('Coffee', 'KC=F', 'Agriculture'),
-        ('Sugar', 'SB=F', 'Agriculture'),
-        ('Cotton', 'CT=F', 'Agriculture'),
-        ('Live Cattle', 'LE=F', 'Agriculture')
+        ('Corn', 'ZC=F', 'Agriculture')
     ]
     
     commodities_data = []
     
-    # Generate 3 months of daily data for each commodity
+    # Generate 1 month of data (instead of 3 months)
     for commodity_name, ticker, category in commodities:
-        # Set base price range based on commodity
+        # Set base price based on commodity
         if category == 'Energy':
-            base_price = np.random.uniform(60, 90) if 'Oil' in commodity_name else np.random.uniform(2, 5)
+            base_price = 70.0
         elif category == 'Precious Metals':
-            base_price = np.random.uniform(1800, 2100) if commodity_name == 'Gold' else np.random.uniform(20, 30)
-        elif category == 'Base Metals':
-            base_price = np.random.uniform(3, 10)
+            base_price = 1900.0
         else:  # Agriculture
-            base_price = np.random.uniform(5, 20)
+            base_price = 10.0
         
-        # Generate daily prices with trends and volatility
-        trend = np.random.uniform(-0.1, 0.15)  # Random trend
-        for days_ago in range(90, 0, -1):
+        # Reduced from 90 days to 15 days
+        for days_ago in range(15, 0, -1):
             date = datetime.now() - timedelta(days=days_ago)
-            daily_change = np.random.normal(trend/90, 0.02)  # Randomize daily change
-            price = base_price * (1 + days_ago * trend/90 + daily_change)
-            
-            # Ensure price is positive
-            price = max(price, 0.1)
-            
-            # Generate mock inventory levels (higher for agricultural, lower for metals)
-            if category == 'Agriculture':
-                inventory = np.random.uniform(800000, 1500000)
-            elif category == 'Energy':
-                inventory = np.random.uniform(400000, 900000)
-            else:
-                inventory = np.random.uniform(100000, 400000)
+            daily_change = np.random.normal(0, 0.02)
+            price = base_price * (1 + daily_change)
             
             commodities_data.append({
                 "commodity_name": commodity_name,
@@ -296,84 +249,40 @@ def load_data_to_db():
                 "price": price,
                 "volume": int(np.random.uniform(50000, 200000)),
                 "change_pct": daily_change * 100,
-                "inventory_level": inventory,
+                "inventory_level": np.random.uniform(100000, 400000),
                 "category": category
             })
     
-    # --- INTEREST RATES DATA ---
+    # --- INTEREST RATES DATA --- REDUCED
     interest_rates_info = [
-        # Central Bank Rates
+        # Just a few key rates
         ('Federal Funds Rate', 'US', 'Overnight', True),
         ('ECB Main Refinancing Rate', 'EU', 'Overnight', True),
-        ('Bank of England Base Rate', 'UK', 'Overnight', True),
-        ('Bank of Japan Policy Rate', 'JP', 'Overnight', True),
-        ('Bank of Canada Overnight Rate', 'CA', 'Overnight', True),
-        
-        # Treasury Yields
-        ('US Treasury Yield', 'US', '2-Year', False),
-        ('US Treasury Yield', 'US', '5-Year', False),
-        ('US Treasury Yield', 'US', '10-Year', False),
-        ('US Treasury Yield', 'US', '30-Year', False),
-        ('UK Gilt Yield', 'UK', '10-Year', False),
-        ('German Bund Yield', 'EU', '10-Year', False),
-        ('Japanese Government Bond Yield', 'JP', '10-Year', False),
-        
-        # Interbank Rates
-        ('LIBOR', 'US', '3-Month', False),
-        ('LIBOR', 'US', '6-Month', False),
-        ('EURIBOR', 'EU', '3-Month', False),
-        ('SONIA', 'UK', '3-Month', False)
+        ('US Treasury Yield', 'US', '10-Year', False)
     ]
     
     interest_rates_data = []
     
     for rate_name, country, term, is_central_bank in interest_rates_info:
-        # Set base rate range based on country and term
+        # Simplified rate assignment
         if is_central_bank:
-            if country == 'US':
-                base_rate = np.random.uniform(4.75, 5.25)
-            elif country == 'EU':
-                base_rate = np.random.uniform(3.75, 4.25)
-            elif country == 'UK':
-                base_rate = np.random.uniform(5.0, 5.5)
-            elif country == 'JP':
-                base_rate = np.random.uniform(0.0, 0.5)
-            else:
-                base_rate = np.random.uniform(3.5, 5.0)
+            base_rate = 4.5 if country == 'US' else 3.75
         else:
-            if '2-Year' in term:
-                base_rate = np.random.uniform(4.25, 4.75)
-            elif '5-Year' in term:
-                base_rate = np.random.uniform(4.0, 4.5)
-            elif '10-Year' in term:
-                base_rate = np.random.uniform(3.75, 4.25)
-            elif '30-Year' in term:
-                base_rate = np.random.uniform(3.5, 4.0)
-            else:
-                base_rate = np.random.uniform(3.75, 5.25)
+            base_rate = 4.0
         
-        # Generate monthly data for the past year with small variations
-        for month in range(12, 0, -1):
+        # Reduced from 12 months to 4 months
+        for month in range(4, 0, -1):
             date = datetime.now().replace(day=15) - timedelta(days=month*30)
             
-            # Previous month's value (create some continuity)
-            if month == 12:
-                previous_value = base_rate - np.random.uniform(-0.25, 0.25)
+            # Previous month's value
+            if month == 4:
+                previous_value = base_rate - 0.1
             else:
                 previous_value = current_value
             
-            # Current month's value
-            if is_central_bank:
-                # Central banks tend to move in 0.25% increments
-                # Use numpy.random.choice with a 1D array
-                rate_options = np.array([-0.25, 0, 0, 0, 0.25])
-                rate_change = rate_options[np.random.randint(0, len(rate_options))]
-            else:
-                # Market rates move more continuously
-                rate_change = np.random.normal(0, 0.1)
-            
+            # Current month's value - simplified
+            rate_change = 0.05 if np.random.random() > 0.7 else 0
             current_value = previous_value + rate_change
-            current_value = max(0, current_value)  # Ensure non-negative
             
             interest_rates_data.append({
                 "rate_name": rate_name,
@@ -385,174 +294,67 @@ def load_data_to_db():
                 "is_central_bank": 1 if is_central_bank else 0
             })
     
-    # --- REAL ESTATE DATA ---
+    # --- REAL ESTATE DATA --- REDUCED
     real_estate_info = [
-        # Residential
+        # Just a few key property types
         ('Single Family', 'US-National', 'Residential'),
-        ('Single Family', 'US-Northeast', 'Residential'),
-        ('Single Family', 'US-Midwest', 'Residential'),
-        ('Single Family', 'US-South', 'Residential'),
-        ('Single Family', 'US-West', 'Residential'),
-        ('Condominiums', 'US-National', 'Residential'),
-        ('Multifamily', 'US-National', 'Residential'),
-        
-        # Commercial
-        ('Office', 'US-National', 'Commercial'),
-        ('Retail', 'US-National', 'Commercial'),
-        ('Industrial', 'US-National', 'Commercial'),
-        ('Healthcare', 'US-National', 'Commercial'),
-        ('Hospitality', 'US-National', 'Commercial'),
-        
-        # International
-        ('Residential', 'UK', 'Residential'),
-        ('Residential', 'EU', 'Residential'),
-        ('Residential', 'JP', 'Residential'),
-        ('Commercial', 'UK', 'Commercial'),
-        ('Commercial', 'EU', 'Commercial'),
-        ('Commercial', 'JP', 'Commercial')
+        ('Office', 'US-National', 'Commercial')
     ]
     
     real_estate_data = []
     
     for property_type, region, category in real_estate_info:
-        # Set base index value and growth trend
-        if category == 'Residential':
-            if 'US' in region:
-                base_index = np.random.uniform(200, 250)
-                trend = np.random.uniform(-0.02, 0.08)  # YoY change
-            else:
-                base_index = np.random.uniform(150, 220)
-                trend = np.random.uniform(-0.04, 0.06)
-        else:  # Commercial
-            if 'US' in region:
-                base_index = np.random.uniform(180, 210)
-                trend = np.random.uniform(-0.05, 0.03)  # Commercial has been weaker
-            else:
-                base_index = np.random.uniform(140, 190)
-                trend = np.random.uniform(-0.07, 0.02)
+        base_index = 200.0 if category == 'Residential' else 180.0
         
-        # Generate quarterly data for two years
-        for quarter in range(8, 0, -1):
-            # Set date to middle of the quarter
-            month = 3 * ((quarter - 1) % 4) + 2
-            year = 2024 - ((quarter - 1) // 4)
-            date = datetime(year, month, 15)
-            
-            # Calculate price index with some variability
-            quarterly_change = np.random.normal(trend/4, 0.01)
-            price_index = base_index * (1 + (quarter * trend/8) + quarterly_change)
-            
-            # Calculate YoY change
-            if quarter <= 4:
-                yoy_change = (price_index / (base_index * (1 + ((quarter + 4) * trend/8)))) - 1
-            else:
-                yoy_change = quarterly_change * 4  # Approximation for older data
-            
-            # Generate days on market - higher for commercial, lower for residential
-            if category == 'Residential':
-                avg_days = int(np.random.uniform(30, 60))
-            else:
-                avg_days = int(np.random.uniform(60, 180))
+        # Just 2 quarters instead of 8
+        for quarter in range(2, 0, -1):
+            date = datetime(2024, quarter * 3, 15)
+            price_index = base_index * (1 + (quarter * 0.01))
+            yoy_change = 2.5  # Simplified
+            avg_days = 45 if category == 'Residential' else 90
             
             real_estate_data.append({
                 "property_type": property_type,
                 "region": region,
                 "timestamp": date,
                 "price_index": price_index,
-                "yoy_change_pct": yoy_change * 100,
-                "inventory_level": int(np.random.uniform(5000, 20000)),
+                "yoy_change_pct": yoy_change,
+                "inventory_level": 10000,
                 "avg_days_on_market": avg_days
             })
     
-    # --- ECONOMIC INDICATORS DATA ---
+    # --- ECONOMIC INDICATORS DATA --- REDUCED
     economic_indicators_info = [
-        # Growth Indicators
+        # Just a few key indicators
         ('GDP Growth Rate', 'US', '%', 'Quarterly'),
-        ('GDP Growth Rate', 'EU', '%', 'Quarterly'),
-        ('GDP Growth Rate', 'UK', '%', 'Quarterly'),
-        ('GDP Growth Rate', 'JP', '%', 'Quarterly'),
-        ('GDP Growth Rate', 'CN', '%', 'Quarterly'),
-        
-        # Inflation Indicators
         ('CPI', 'US', '%', 'Monthly'),
-        ('CPI', 'EU', '%', 'Monthly'),
-        ('CPI', 'UK', '%', 'Monthly'),
-        ('CPI', 'JP', '%', 'Monthly'),
-        ('Core PCE', 'US', '%', 'Monthly'),
-        
-        # Employment Indicators
-        ('Unemployment Rate', 'US', '%', 'Monthly'),
-        ('Unemployment Rate', 'EU', '%', 'Monthly'),
-        ('Unemployment Rate', 'UK', '%', 'Monthly'),
-        ('Unemployment Rate', 'JP', '%', 'Monthly'),
-        ('Non-Farm Payrolls', 'US', 'Thousands', 'Monthly'),
-        
-        # Other Indicators
-        ('Retail Sales YoY', 'US', '%', 'Monthly'),
-        ('Industrial Production', 'US', 'Index', 'Monthly'),
-        ('Consumer Sentiment', 'US', 'Index', 'Monthly'),
-        ('Housing Starts', 'US', 'Thousands', 'Monthly'),
-        ('Manufacturing PMI', 'US', 'Index', 'Monthly')
+        ('Unemployment Rate', 'US', '%', 'Monthly')
     ]
     
     economic_data = []
     
     for indicator_name, country, unit, frequency in economic_indicators_info:
-        # Set base values and ranges based on indicator
+        # Simplified values
         if indicator_name == 'GDP Growth Rate':
-            base_value = np.random.uniform(1.5, 3.0) if country != 'JP' else np.random.uniform(0.5, 1.5)
-            volatility = 0.5
-        elif indicator_name == 'CPI' or indicator_name == 'Core PCE':
-            base_value = np.random.uniform(2.0, 4.0) if country != 'JP' else np.random.uniform(0.0, 2.0)
-            volatility = 0.3
-        elif indicator_name == 'Unemployment Rate':
-            base_value = np.random.uniform(3.5, 5.0) if country == 'US' else np.random.uniform(5.0, 7.0)
-            volatility = 0.2
-        elif indicator_name == 'Non-Farm Payrolls':
-            base_value = np.random.uniform(150, 250)
-            volatility = 50
-        elif indicator_name == 'Retail Sales YoY':
-            base_value = np.random.uniform(2.0, 5.0)
-            volatility = 1.0
-        elif indicator_name == 'Consumer Sentiment':
-            base_value = np.random.uniform(90, 110)
-            volatility = 5
-        elif indicator_name == 'Manufacturing PMI':
-            base_value = np.random.uniform(48, 55)
-            volatility = 2
-        else:
-            base_value = np.random.uniform(100, 120)
-            volatility = 5
+            base_value = 2.5
+        elif indicator_name == 'CPI':
+            base_value = 3.0
+        else:  # Unemployment
+            base_value = 4.0
         
-        # Generate periodic data
-        if frequency == 'Monthly':
-            periods = 24  # Two years of monthly data
-            days_per_period = 30
-        else:  # Quarterly
-            periods = 8  # Two years of quarterly data
-            days_per_period = 90
+        # Reduced from 24/8 periods to just 3
+        periods = 3
+        days_per_period = 30 if frequency == 'Monthly' else 90
         
         for period in range(periods, 0, -1):
-            # Calculate date
             date = datetime.now() - timedelta(days=period*days_per_period)
             
-            # Previous period's value
             if period == periods:
-                previous_value = base_value - np.random.normal(0, volatility/5)
+                previous_value = base_value - 0.1
             else:
                 previous_value = current_value
             
-            # Apply a small trend
-            trend = np.random.uniform(-0.05, 0.05)
-            
-            # Current period's value with noise
-            current_value = previous_value * (1 + trend) + np.random.normal(0, volatility/5)
-            
-            # Ensure reasonable values
-            if indicator_name == 'Unemployment Rate':
-                current_value = max(2.0, current_value)
-            elif 'PMI' in indicator_name:
-                current_value = max(30, min(70, current_value))
+            current_value = previous_value + np.random.normal(0, 0.1)
             
             economic_data.append({
                 "indicator_name": indicator_name,
