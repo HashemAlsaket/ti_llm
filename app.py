@@ -291,6 +291,7 @@ def get_data_from_db(ticker="All", model_group="All"):
                 """E.G. -- Valid SQLite date manipulation
 SELECT * FROM stock_data
 WHERE timestamp >= date('now', '-6 months');"""
+"""DO NOT EVER ATTEMPT TO USE COLUMNS THAT YOU DO NOT SEE UNDER THE TABLE IN THE SCHEMA PROVIDED TO YOU. IT WILL NOT WORK."""
             )),
             ("human", """
             Database Schema:
