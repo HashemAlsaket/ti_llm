@@ -150,7 +150,7 @@ def load_data_to_db():
     
     trades_data = []
     for _ in range(1000):
-        chosen_pair = np.random.choice(len(all_tickers))
+        chosen_index = np.random.randint(0, len(all_tickers))
         ticker, asset_class = all_tickers[chosen_pair]
         
         # Assign sectors based on ticker (simplified logic)
