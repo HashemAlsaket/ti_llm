@@ -12,67 +12,30 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import SystemMessage
 from langchain_community.utilities import SQLDatabase
 
-# --- SETUP ---
-st.set_page_config(page_title="TI LLM Agent", layout="wide")
+# Define the detailed schema as a constant at the top level for reuse
+DETAILED_SCHEMA = """
+Table: trades
+Columns: id INTEGER, ticker TEXT, model_group TEXT, timestamp TIMESTAMP, position REAL, pnl REAL, 
+alpha_score REAL, volatility REAL, sector TEXT, commodity_exposure REAL, interest_rate_sensitivity REAL
 
-# --- CUSTOM THEME ---
-# Define Tudor Investment theme colors based on logo
-tudor_blue = "#0A50A1"  # Primary blue from Tudor logo
-tudor_light_blue = "#3B7EC9"
-tudor_dark_blue = "#063773"
-background_color = "#FFFFFF"
-accent_color = "#E5EBF3"
+Table: economic_indicators
+Columns: id INTEGER, indicator_name TEXT, timestamp TIMESTAMP, value REAL, region TEXT, previous_value REAL
 
-# Custom CSS with Tudor theme
-st.markdown(f"""
-<style>
-    .stApp {{
-        background-color: {background_color};
-    }}
-    .stButton>button {{
-        background-color: {tudor_blue};
-        color: white;
-    }}
-    .stButton>button:hover {{
-        background-color: {tudor_light_blue};
-    }}
-    .st-cb, .st-bq, .st-an, .st-av, .st-at {{
-        border-color: {tudor_blue};
-    }}
-    div[data-testid="stMetricValue"] {{
-        color: {tudor_blue};
-        font-weight: bold;
-    }}
-    div[data-testid="stExpander"] {{
-        border-left-color: {tudor_blue} !important;
-    }}
-    .stTabs [data-baseweb="tab-list"] {{
-        gap: 24px;
-    }}
-    .stTabs [data-baseweb="tab"] {{
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: {accent_color};
-        border-radius: 4px 4px 0 0;
-        gap: 1px;
-        padding-top: 10px;
-        padding-bottom: 10px;
-    }}
-    .stTabs [aria-selected="true"] {{
-        background-color: {tudor_blue};
-        color: white;
-    }}
-    h1, h2, h3, h4, h5, h6 {{
-        color: {tudor_dark_blue};
-    }}
-    .stSidebar .stButton>button {{
-        width: 100%;
-    }}
-    a {{
-        color: {tudor_blue};
-    }}
-</style>
-""", unsafe_allow_html=True)
+Table: historical_trades
+Columns: id INTEGER, ticker TEXT, trade_date TIMESTAMP, action TEXT, quantity INTEGER, price REAL, 
+model_group TEXT, trade_id TEXT
+
+Table: market_news
+Columns: id INTEGER, title TEXT, summary TEXT, timestamp TIMESTAMP, source TEXT, url TEXT, 
+tickers TEXT, sentiment REAL, relevance TEXT
+
+Table: simulated_stock_data
+Columns: id INTEGER, ticker TEXT, timestamp TIMESTAMP, open REAL, high REAL, low REAL, close REAL, volume INTEGER
+
+Table: real_stock_data
+Columns: id INTEGER, ticker TEXT, timestamp TIMESTAMP, open REAL, high REAL, low REAL, close REAL, 
+volume INTEGER, last_refreshed TIMESTAMP
+"""
 
 # --- DATABASE SETUP ---
 DB_PATH = "finance_data.db"
@@ -191,7 +154,7 @@ def load_data_to_db():
         trades_data.append({
             "ticker": ticker,
             "model_group": np.random.choice(model_groups),
-            "timestamp": datetime(2025, np.random.randint(1, 5), np.random.randint(1, 29)),
+            "timestamp": datetime(2024, np.random.randint(1, 5), np.random.randint(1, 29)),
             "position": np.random.uniform(-2000000, 2000000),
             "pnl": np.random.uniform(-150000, 200000),
             "alpha_score": np.random.normal(0, 1),
@@ -236,7 +199,7 @@ def load_data_to_db():
                 
                 economic_data.append({
                     "indicator_name": indicator,
-                    "timestamp": datetime(2025, month, 15),
+                    "timestamp": datetime(2024, month, 15),
                     "value": current_value,
                     "region": region,
                     "previous_value": previous_value
@@ -248,7 +211,7 @@ def load_data_to_db():
     
     for ticker in tickers:
         for _ in range(20):  # 20 trades per ticker
-            trade_date = datetime(2025, np.random.randint(1, 5), np.random.randint(1, 29))
+            trade_date = datetime(2024, np.random.randint(1, 5), np.random.randint(1, 29))
             price = 0
             
             # Set price ranges based on ticker
@@ -301,55 +264,102 @@ def load_data_to_db():
     return trades_df
 
 def get_data_from_db(ticker="All", model_group="All"):
-    """Fetch data from SQLite database with optional filters"""
+    """Fetch data from SQLite database with optional filters using LLM-generated SQL"""
     conn = sqlite3.connect(DB_PATH)
     
-    query = "SELECT * FROM trades"
-    params = []
+    # Build natural language description of the query based on filters
+    query_description = "Get all trades"
+    filter_descriptions = []
     
-    # Add filters if specified
-    where_clauses = []
     if ticker != "All":
-        where_clauses.append("ticker = ?")
-        params.append(ticker)
+        filter_descriptions.append(f"ticker is {ticker}")
     if model_group != "All":
-        where_clauses.append("model_group = ?")
-        params.append(model_group)
+        filter_descriptions.append(f"model group is {model_group}")
     
-    if where_clauses:
-        query += " WHERE " + " AND ".join(where_clauses)
+    if filter_descriptions:
+        query_description += " where " + " and ".join(filter_descriptions)
     
-    df = pd.read_sql(query, conn, params=params)
+    try:
+        # Create a custom prompt template that includes the detailed schema
+        sql_generation_prompt = ChatPromptTemplate.from_messages([
+            SystemMessage(content=(
+                "You are an expert SQL query generator for a financial analytics system. "
+                "Generate a precise, efficient SQL query to answer the user's question based on the database schema provided. "
+                "The query should be well-optimized and follow best practices. "
+                "Return ONLY the SQL query, with no additional explanation."
+            )),
+            ("human", """
+            Database Schema:
+            {schema}
+            
+            User Question: {question}
+            
+            Please generate a SQL query to answer this question:
+            """)
+        ])
+        
+        # Generate SQL query using the custom prompt
+        chain = sql_generation_prompt | langchain_llm | StrOutputParser()
+        sql_query = chain.invoke({
+            "schema": DETAILED_SCHEMA,
+            "question": query_description
+        })
+        
+        # Execute the query
+        df = pd.read_sql(sql_query, conn)
+        
+    except Exception as e:
+        # Fallback to manual query construction if LLM query fails
+        print(f"LLM query generation failed: {e}. Using fallback query.")
+        
+        query = "SELECT * FROM trades"
+        params = []
+        
+        # Add filters if specified
+        where_clauses = []
+        if ticker != "All":
+            where_clauses.append("ticker = ?")
+            params.append(ticker)
+        if model_group != "All":
+            where_clauses.append("model_group = ?")
+            params.append(model_group)
+        
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+        
+        df = pd.read_sql(query, conn, params=params)
+    
     conn.close()
     return df
 
-def get_db_schema():
-    """Get the database schema as a string"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Get table names
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-    tables = cursor.fetchall()
-    
-    schema = []
-    for table in tables:
-        table_name = table[0]
-        cursor.execute(f"PRAGMA table_info({table_name});")
-        columns = cursor.fetchall()
-        
-        col_defs = [f"{col[1]} {col[2]}" for col in columns]
-        schema.append(f"Table: {table_name}\nColumns: {', '.join(col_defs)}")
-    
-    conn.close()
-    return "\n\n".join(schema)
+# This function is removed as we're now using the detailed static schema
+# def get_db_schema():
+#     """Get the database schema as a string"""
+#     conn = sqlite3.connect(DB_PATH)
+#     cursor = conn.cursor()
+#     
+#     # Get table names
+#     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+#     tables = cursor.fetchall()
+#     
+#     schema = []
+#     for table in tables:
+#         table_name = table[0]
+#         cursor.execute(f"PRAGMA table_info({table_name});")
+#         columns = cursor.fetchall()
+#         
+#         col_defs = [f"{col[1]} {col[2]}" for col in columns]
+#         schema.append(f"Table: {table_name}\nColumns: {', '.join(col_defs)}")
+#     
+#     conn.close()
+#     return "\n\n".join(schema)
 
 # --- LOGIN FLOW ---
 def login():
     st.session_state["authenticated"] = False
 
     with st.form("Login"):
-        # st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
+        st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
         st.write("🔐 Please log in to continue")
         user = st.text_input("Username")
         pw = st.text_input("Password", type="password")
@@ -367,8 +377,8 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
 
 # --- HEADER WITH LOGO ---
 col1, col2 = st.columns([1, 5])
-# with col1:
-#     st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
+with col1:
+    st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
 with col2:
     st.title("📊 TI LLM Agent Prototype")
 
@@ -391,9 +401,6 @@ db = SQLDatabase.from_uri(db_url)
 # --- SQL LLM QUERY FUNCTION ---
 def execute_sql_query(prompt, thinking_container):
     """Use LangChain to convert natural language to SQL and execute, with thinking log"""
-    # Get DB schema
-    schema = get_db_schema()
-    
     # Custom styled sections with Tudor theme
     thinking_container.markdown("""
     <div style="border-left: 4px solid #0A50A1; padding-left: 20px; margin-bottom: 15px;">
@@ -407,23 +414,41 @@ def execute_sql_query(prompt, thinking_container):
         <h4 style="color: #0A50A1;">📋 Database Schema</h4>
     </div>
     """, unsafe_allow_html=True)
-    thinking_container.code(schema, language="sql")
+    thinking_container.code(DETAILED_SCHEMA, language="sql")
     
-    # Create a chain that generates SQL
-    sql_chain = create_sql_query_chain(
-        langchain_llm,
-        db,
-        # k=3  # Number of examples used for few-shot prompting
-    )
+    # Create a custom prompt template that includes the detailed schema
+    sql_generation_prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content=(
+            "You are an expert SQL query generator for a financial analytics system. "
+            "Generate a precise, efficient SQL query to answer the user's question based on the database schema provided. "
+            "Be sure to use appropriate joins when querying across multiple tables. "
+            "Use aggregations, sorting, and filtering as needed to provide a comprehensive answer. "
+            "The query should be well-optimized and follow best practices. "
+            "Return ONLY the SQL query, with no additional explanation."
+        )),
+        ("human", """
+        Database Schema:
+        {schema}
+        
+        User Question: {question}
+        
+        Please generate a SQL query to answer this question:
+        """)
+    ])
     
     try:
-        # Generate SQL query
+        # Generate SQL query using the custom prompt
         thinking_container.markdown("""
         <div style="border-left: 4px solid #0A50A1; padding-left: 20px; margin-bottom: 15px;">
             <h4 style="color: #0A50A1;">🔍 Generating SQL Query</h4>
         </div>
         """, unsafe_allow_html=True)
-        sql_query = sql_chain.invoke({"question": prompt})
+        
+        chain = sql_generation_prompt | langchain_llm | StrOutputParser()
+        sql_query = chain.invoke({
+            "schema": DETAILED_SCHEMA,
+            "question": prompt
+        })
         
         thinking_container.markdown("""
         <div style="border-left: 4px solid #0A50A1; padding-left: 20px; margin-bottom: 15px;">
@@ -463,11 +488,23 @@ def execute_sql_query(prompt, thinking_container):
                 "Focus on the business insights and implications for investment decisions. "
                 "If relevant, mention potential trading strategies based on the data."
             )),
-            ("human", "SQL Query: {query}\n\nResults: {results}\n\nUser question: {question}")
+            ("human", """
+            Database Schema:
+            {schema}
+            
+            SQL Query: {query}
+            
+            Results: {results}
+            
+            User question: {question}
+            
+            Please provide a detailed analysis of these results:
+            """)
         ])
         
         chain = explain_prompt | langchain_llm | StrOutputParser()
         explanation = chain.invoke({
+            "schema": DETAILED_SCHEMA,
             "query": sql_query,
             "results": results.to_string(),
             "question": prompt
@@ -490,9 +527,15 @@ def execute_sql_query(prompt, thinking_container):
             "error": str(e),
             "sql": "Error generating or executing SQL"
         }
+    except Exception as e:
+        thinking_container.error(f"❌ **Error:** {str(e)}")
+        return {
+            "error": str(e),
+            "sql": "Error generating or executing SQL"
+        }
 
 # --- SIDEBAR FILTERS ---
-# st.sidebar.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=80)
+st.sidebar.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=80)
 st.sidebar.header("🔍 Filter Trades")
 ticker_options = ["All"]
 model_options = ["All"]
@@ -510,7 +553,11 @@ model = st.sidebar.selectbox("Select Model Group", model_options)
 filtered_df = get_data_from_db(ticker, model)
 
 # --- DISPLAY DATA ---
-st.subheader("🔁 Trade Data")
+st.markdown("""
+<div style='background-color: #E5EBF3; padding: 10px; border-radius: 5px; border-left: 5px solid #0A50A1;'>
+    <h3 style='color: #0A50A1; margin: 0;'>🔁 Trade Data</h3>
+</div>
+""", unsafe_allow_html=True)
 st.dataframe(filtered_df, use_container_width=True)
 
 # --- SUMMARY METRICS ---
@@ -555,15 +602,15 @@ test_prompts = [
     "Which ticker has the most negative position?",
     "What's the average PnL for trades in the Materials sector?",
     "How does commodity exposure correlate with PnL across different sectors?",
-    "What was the trend of oil prices in the first quarter of 2025?",
-    "Which region had the highest interest rates in March 2025?",
+    "What was the trend of oil prices in the first quarter of 2024?",
+    "Which region had the highest interest rates in March 2024?",
     "What is the distribution of trade sizes for NVDA?",
-    "How have gold prices changed month-over-month in 2025?",
+    "How have gold prices changed month-over-month in 2024?",
     "Compare the performance of the Macro Alpha and Tech Sector model groups",
     "What's the total position value by sector?",
     "Which model has the most consistent alpha score?",
     "Is there a correlation between interest rates and financial sector performance?",
-    "What was the average buy price for Apple stock in Q1 2025?",
+    "What was the average buy price for Apple stock in Q1 2024?",
     "How does consumer confidence relate to position sizes in Consumer Discretionary stocks?",
     "Which commodity-related tickers have the highest volatility?",
     "What is the trend in inflation rates across different regions?",
@@ -572,7 +619,11 @@ test_prompts = [
 ]
 
 # --- LLM QUERY INTERFACE ---
-st.subheader("🤖 Ask a Question")
+st.markdown("""
+<div style='background-color: #E5EBF3; padding: 10px; border-radius: 5px; border-left: 5px solid #0A50A1;'>
+    <h3 style='color: #0A50A1; margin: 0;'>🤖 Ask a Question</h3>
+</div>
+""", unsafe_allow_html=True)
 
 # Add dropdown for test prompts
 use_test_prompt = st.checkbox("Use a test prompt", value=False)
@@ -606,19 +657,32 @@ if st.button("Ask the TI LLM Agent",
             if "error" in result:
                 st.error(f"Error: {result['error']}")
             else:
-                st.success("Analysis Results:")
-                st.write(result["explanation"])
+                # Custom styled results box with Tudor theme
+                st.markdown(f"""
+                <div style="background-color: #E5EBF3; border: 2px solid #0A50A1; 
+                     padding: 20px; border-radius: 5px; margin-bottom: 20px;">
+                    <h3 style="color: #0A50A1; margin-top: 0;">Analysis Results</h3>
+                    <div style="color: #000;">{result["explanation"]}</div>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                with st.expander("View SQL Query"):
-                    st.code(result["sql"], language="sql")
+                col1, col2 = st.columns(2)
+                with col1:
+                    with st.expander("View SQL Query"):
+                        st.code(result["sql"], language="sql")
                 
-                with st.expander("View Raw Results"):
-                    st.dataframe(result["results"])
+                with col2:
+                    with st.expander("View Raw Results"):
+                        st.dataframe(result["results"])
     else:
         st.warning("Please enter a question.")
 
 # --- ADD DATA UPLOAD FUNCTIONALITY ---
-st.subheader("📤 Upload Additional Data")
+st.markdown("""
+<div style='background-color: #E5EBF3; padding: 10px; border-radius: 5px; border-left: 5px solid #0A50A1;'>
+    <h3 style='color: #0A50A1; margin: 0;'>📤 Upload Additional Data</h3>
+</div>
+""", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("Upload CSV file with trading data", type=["csv"])
 if uploaded_file is not None:
