@@ -286,7 +286,7 @@ def get_data_from_db(ticker="All", model_group="All"):
                 "You are an expert SQL query generator for a financial analytics system. "
                 "Generate a precise, efficient SQL query to answer the user's question based on the database schema provided. "
                 "The query should be well-optimized and follow best practices. "
-                "Return ONLY the SQL query, with no additional explanation."
+                "Return ONLY the SQLLite3 query, with no additional explanation."
             )),
             ("human", """
             Database Schema:
