@@ -5,7 +5,6 @@ from datetime import datetime
 import sqlite3
 import os
 import time
-from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain.chains import create_sql_query_chain
 from langchain_core.prompts import ChatPromptTemplate
@@ -317,46 +316,15 @@ if db_is_empty():
         load_data_to_db()
         st.success("Sample data loaded successfully!")
 
-# --- INITIALIZE CLIENTS ---
-openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+# --- INITIALIZE LANGCHAIN LLM ---
 langchain_llm = ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"], model="gpt-4")
 
 # --- SETUP LANGCHAIN SQL DATABASE ---
 db_url = f"sqlite:///{DB_PATH}"
 db = SQLDatabase.from_uri(db_url)
 
-# --- LLM QUERY FUNCTIONS WITH THINKING LOG ---
-def ask_direct_llm(prompt, context, thinking_container):
-    """Legacy direct LLM query method with thinking log"""
-    thinking_container.write("🧠 **Agent Thinking:** Preparing to analyze data directly...")
-    time.sleep(0.5)
-    
-    thinking_container.write("📊 **Data Sample:**")
-    thinking_container.json(context[:500] + "..." if len(context) > 500 else context)
-    time.sleep(1)
-    
-    system_prompt = (
-        "You are a financial analyst assistant for Tudor Investments. "
-        "Answer questions using the following data context."
-    )
-    
-    thinking_container.write("🤔 **Processing Query:** Analyzing data to find patterns and insights...")
-    time.sleep(1)
-
-    response = openai_client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Data context: {context}\n\nUser question: {prompt}"},
-        ],
-        temperature=0.2,
-        max_tokens=500
-    )
-    
-    thinking_container.write("✅ **Completed Analysis:** Ready to provide insights")
-    return response.choices[0].message.content
-
-def ask_sql_llm(prompt, thinking_container):
+# --- SQL LLM QUERY FUNCTION ---
+def execute_sql_query(prompt, thinking_container):
     """Use LangChain to convert natural language to SQL and execute, with thinking log"""
     # Get DB schema
     schema = get_db_schema()
@@ -366,7 +334,6 @@ def ask_sql_llm(prompt, thinking_container):
     
     thinking_container.write("📋 **Database Schema:**")
     thinking_container.code(schema, language="sql")
-    time.sleep(1)
     
     # Create a chain that generates SQL
     sql_chain = create_sql_query_chain(
@@ -382,7 +349,6 @@ def ask_sql_llm(prompt, thinking_container):
         
         thinking_container.write("📝 **Generated SQL:**")
         thinking_container.code(sql_query, language="sql")
-        time.sleep(1)
         
         # Execute the query
         thinking_container.write("⚙️ **Executing SQL Query...**")
@@ -391,8 +357,7 @@ def ask_sql_llm(prompt, thinking_container):
         conn.close()
         
         thinking_container.write("📊 **Query Results:**")
-        thinking_container.dataframe(results.head(5) if len(results) > 5 else results)
-        time.sleep(1)
+        thinking_container.dataframe(results.head(10) if len(results) > 10 else results)
         
         # Get the LLM to explain the results
         thinking_container.write("🧩 **Interpreting Results...**")
@@ -401,7 +366,8 @@ def ask_sql_llm(prompt, thinking_container):
             SystemMessage(content=(
                 "You are a financial analyst assistant for Tudor Investments. "
                 "Explain the following SQL query and its results in a clear, concise way. "
-                "Focus on the business insights and implications."
+                "Focus on the business insights and implications for investment decisions. "
+                "If relevant, mention potential trading strategies based on the data."
             )),
             ("human", "SQL Query: {query}\n\nResults: {results}\n\nUser question: {question}")
         ])
@@ -427,64 +393,6 @@ def ask_sql_llm(prompt, thinking_container):
             "sql": "Error generating or executing SQL"
         }
 
-def ask_enhanced_sql_llm(prompt, filtered_df, thinking_container):
-    """Enhanced SQL-based approach with better context and thinking log"""
-    thinking_container.write("🧠 **Agent Thinking:** Starting enhanced analysis...")
-    time.sleep(0.5)
-    
-    # Try SQL approach
-    thinking_container.write("⚡ **Phase 1:** Performing SQL query analysis")
-    sql_response = ask_sql_llm(prompt, thinking_container)
-    
-    # Create a combined prompt with SQL results and filtered data context
-    thinking_container.write("⚡ **Phase 2:** Enhancing with filtered data context")
-    time.sleep(0.5)
-    
-    combined_prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content=(
-            "You are a sophisticated financial analyst assistant for Tudor Investments. "
-            "Provide a comprehensive answer to the user's question using the SQL query results "
-            "and the current filtered data context."
-        )),
-        ("human", """
-        User question: {question}
-        
-        SQL Analysis:
-        {sql_results}
-        
-        Current Filtered Data Summary:
-        {filtered_data_summary}
-        """)
-    ])
-    
-    # Create a summary of the filtered data
-    filtered_summary = f"Current filter: Ticker={ticker}, Model Group={model}"
-    thinking_container.write(f"📌 **Current Context:** {filtered_summary}")
-    time.sleep(0.5)
-    
-    if "error" in sql_response:
-        sql_results_text = f"SQL Error: {sql_response['error']}"
-        thinking_container.error(f"❌ **SQL Error:** {sql_response['error']}")
-    else:
-        sql_results_text = f"SQL Query: {sql_response['sql']}\n\nResults Summary: {sql_response.get('explanation', 'No explanation available')}"
-    
-    thinking_container.write("🔄 **Synthesizing Complete Answer...**")
-    
-    chain = combined_prompt | langchain_llm | StrOutputParser()
-    final_response = chain.invoke({
-        "question": prompt,
-        "sql_results": sql_results_text,
-        "filtered_data_summary": filtered_summary
-    })
-    
-    thinking_container.write("✅ **Enhanced Analysis Complete:** Final response ready")
-    
-    return {
-        "response": final_response,
-        "sql": sql_response.get("sql", "No SQL query generated"),
-        "sql_results": sql_response.get("results", pd.DataFrame()) if "error" not in sql_response else None
-    }
-
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("🔍 Filter Trades")
 ticker_options = ["All"]
@@ -498,13 +406,6 @@ conn.close()
 
 ticker = st.sidebar.selectbox("Select Ticker", ticker_options)
 model = st.sidebar.selectbox("Select Model Group", model_options)
-
-# --- QUERY APPROACH SELECTION ---
-query_method = st.sidebar.radio(
-    "LLM Query Method",
-    ["Simple (Direct)", "SQL-Based", "Enhanced SQL"],
-    help="Choose how the LLM will process your query"
-)
 
 # --- GET FILTERED DATA ---
 filtered_df = get_data_from_db(ticker, model)
@@ -559,56 +460,35 @@ else:
     user_prompt = st.text_area("What would you like to know about this trading data?", 
                             placeholder="Example: Which model group has the highest PnL?")
 
-# Create a placeholder for the agent thinking log
-thinking_log = st.empty()
+# Filter context prompt
+filtered_context = f"Current filter: Ticker={ticker}, Model Group={model}"
 
 if st.button("Ask the TI LLM Agent"):
     if user_prompt:
-        # Clear previous thinking log
+        # Create thinking log container
         thinking_container = st.expander("💡 Agent Thinking Process", expanded=True)
         
         with st.spinner("Processing your question..."):
-            if query_method == "Simple (Direct)":
-                # Use the original direct approach
-                sample_data = filtered_df.head(10).to_dict(orient="records")
-                context_text = str(sample_data)
-                answer = ask_direct_llm(user_prompt, context_text, thinking_container)
+            # Add filter context to prompt if filters are applied
+            enhanced_prompt = user_prompt
+            if ticker != "All" or model != "All":
+                thinking_container.write(f"📌 **Applied Filters:** {filtered_context}")
+                enhanced_prompt = f"{user_prompt} (Context: {filtered_context})"
+            
+            # Execute SQL query and get results
+            result = execute_sql_query(enhanced_prompt, thinking_container)
+            
+            if "error" in result:
+                st.error(f"Error: {result['error']}")
+            else:
+                st.success("Analysis Results:")
+                st.write(result["explanation"])
                 
-                st.success("LLM Response:")
-                st.write(answer)
-                
-            elif query_method == "SQL-Based":
-                # Use the SQL-based approach
-                result = ask_sql_llm(user_prompt, thinking_container)
-                
-                if "error" in result:
-                    st.error(f"Error: {result['error']}")
-                else:
-                    st.success("LLM Response:")
-                    st.write(result["explanation"])
-                    
-                    with st.expander("View SQL Query"):
-                        st.code(result["sql"], language="sql")
-                    
-                    with st.expander("View Raw Results"):
-                        st.dataframe(result["results"])
-                
-            else:  # Enhanced SQL
-                # Use the enhanced SQL approach
-                result = ask_enhanced_sql_llm(user_prompt, filtered_df, thinking_container)
-                
-                st.success("LLM Response:")
-                st.write(result["response"])
-                
-                with st.expander("View Technical Details"):
-                    st.subheader("SQL Query")
+                with st.expander("View SQL Query"):
                     st.code(result["sql"], language="sql")
-                    
-                    if result["sql_results"] is not None:
-                        st.subheader("SQL Results")
-                        st.dataframe(result["sql_results"])
-                    else:
-                        st.warning("SQL query execution failed")
+                
+                with st.expander("View Raw Results"):
+                    st.dataframe(result["results"])
     else:
         st.warning("Please enter a question.")
 
