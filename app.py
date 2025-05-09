@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import sqlite3
 import os
 import time
+import base64
 from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain.chains import create_sql_query_chain
@@ -13,8 +14,99 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import SystemMessage
 from langchain_community.utilities import SQLDatabase
 
-# --- SETUP ---
-st.set_page_config(page_title="TI LLM Agent", layout="wide")
+# --- TUDOR THEME SETUP ---
+# Tudor blue color scheme
+TUDOR_BLUE = "#0F4B81"
+TUDOR_LIGHT_BLUE = "#5A7EAF"
+TUDOR_DARK_BLUE = "#0A3258"
+TUDOR_BG = "#F0F2F6"
+TUDOR_WHITE = "#FFFFFF"
+TUDOR_ACCENT = "#D4E0F0"
+
+# Logo in base64 for embedding in the app
+TUDOR_LOGO = "data:image/png;base64,..."  # Replace with actual base64 string if needed
+
+# Custom CSS for Tudor theme
+def tudor_theme():
+    st.markdown(f"""
+    <style>
+    .stApp {{
+        background-color: {TUDOR_BG};
+    }}
+    .main .block-container {{
+        padding-top: 2rem;
+    }}
+    h1, h2, h3, h4, h5, h6 {{
+        color: {TUDOR_BLUE};
+    }}
+    .stButton>button {{
+        background-color: {TUDOR_BLUE};
+        color: white;
+        border-radius: 4px;
+        border: none;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }}
+    .stButton>button:hover {{
+        background-color: {TUDOR_DARK_BLUE};
+    }}
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 2px;
+    }}
+    .stTabs [data-baseweb="tab"] {{
+        background-color: {TUDOR_ACCENT};
+        color: {TUDOR_BLUE};
+        border-radius: 4px 4px 0 0;
+        padding: 0.5rem 1rem;
+        border: none;
+    }}
+    .stTabs [aria-selected="true"] {{
+        background-color: {TUDOR_BLUE};
+        color: white;
+    }}
+    .stSelectbox label, .stMultiselect label {{
+        color: {TUDOR_BLUE};
+        font-weight: 500;
+    }}
+    div[data-testid="stExpander"] details summary {{
+        background-color: {TUDOR_ACCENT};
+        color: {TUDOR_BLUE};
+        border-radius: 4px;
+    }}
+    div[data-testid="stExpander"] details[open] summary {{
+        background-color: {TUDOR_BLUE};
+        color: white;
+        border-radius: 4px 4px 0 0;
+    }}
+    div[data-testid="stExpander"] details {{
+        background-color: {TUDOR_WHITE};
+        border-radius: 4px;
+        border: 1px solid {TUDOR_ACCENT};
+    }}
+    .stDataFrame, .stTable {{
+        border: 1px solid {TUDOR_ACCENT};
+        border-radius: 4px;
+    }}
+    .stAlert {{
+        border-radius: 4px;
+    }}
+    .success {{
+        background-color: #D6EFC7;
+        border-left-color: #4CAF50;
+    }}
+    .info {{
+        background-color: {TUDOR_ACCENT};
+        border-left-color: {TUDOR_BLUE};
+    }}
+    .stTextArea textarea, .stTextInput input {{
+        border-radius: 4px;
+        border-color: {TUDOR_LIGHT_BLUE};
+    }}
+    .css-ch5dnh {{
+        color: {TUDOR_BLUE};
+    }}
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- DATABASE SETUP ---
 DB_PATH = "finance_data.db"
@@ -579,70 +671,63 @@ def generate_market_insights():
     
     return insight_text, top_performer['ticker'], worst_performer['ticker'], avg_return
 
+# --- TUDOR LOGO DISPLAY FUNCTION ---
+def display_tudor_logo():
+    st.markdown(f"""
+    <div style="background-color:{TUDOR_BLUE}; padding:10px; border-radius:5px; margin-bottom:20px; 
+        display:flex; align-items:center; justify-content:center;">
+        <img src="https://raw.githubusercontent.com/streamlit/streamlit/develop/examples/data/logo.png" 
+            style="width:40px; margin-right:10px;">
+        <span style="color:white; font-size:24px; font-weight:bold;">TUDOR INVESTMENTS</span>
+    </div>
+    """, unsafe_allow_html=True)
+
 # --- LOGIN FLOW ---
 def login():
     st.session_state["authenticated"] = False
+    
+    # Apply Tudor theme for login page
+    tudor_theme()
+    
+    # Display Tudor logo
+    display_tudor_logo()
+    
+    st.markdown(f"""
+    <div style="display:flex; justify-content:center; margin-top:50px;">
+        <div style="background-color:{TUDOR_WHITE}; border-radius:10px; padding:30px; 
+                box-shadow:0 4px 6px rgba(0,0,0,0.1); width:400px;">
+            <h2 style="color:{TUDOR_BLUE}; text-align:center; margin-bottom:20px;">
+                Sign in to Tudor LLM Agent
+            </h2>
+            <p style="text-align:center; margin-bottom:30px; color:{TUDOR_DARK_BLUE};">
+                Please enter your credentials to continue
+            </p>
+    """, unsafe_allow_html=True)
 
     with st.form("Login"):
-        st.write("🔐 Please log in to continue")
-        user = st.text_input("Username")
-        pw = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
+        st.text_input("Username", key="username")
+        st.text_input("Password", type="password", key="password")
+        
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            submitted = st.form_submit_button("Sign In", use_container_width=True)
 
         if submitted:
-            if user == st.secrets["credentials"]["username"] and pw == st.secrets["credentials"]["password"]:
+            if st.session_state["username"] == st.secrets["credentials"]["username"] and st.session_state["password"] == st.secrets["credentials"]["password"]:
                 st.session_state["authenticated"] = True
             else:
                 st.error("Invalid credentials")
+
+    st.markdown("""
+    </div></div>
+    """, unsafe_allow_html=True)
 
 if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
     login()
     st.stop()
 
-st.title("📊 TI LLM Agent Prototype")
-
-# --- INITIALIZE DATABASE ---
-init_db()
-
-# Check if trades data exists
-if not db_has_data('trades'):
-    with st.spinner("Loading initial trades data..."):
-        load_data_to_db()
-        st.success("Sample data loaded successfully!")
-else:
-    # If trades exist but other data doesn't, load additional data
-    with st.spinner("Checking for additional data..."):
-        if check_and_load_additional_data():
-            st.success("Additional market data loaded successfully!")
-
-# --- INITIALIZE CLIENTS ---
-openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-langchain_llm = ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"], model="gpt-4")
-
-# --- SETUP LANGCHAIN SQL DATABASE ---
-db_url = f"sqlite:///{DB_PATH}"
-db = SQLDatabase.from_uri(db_url)
-
-# --- SIDEBAR FILTERS ---
-st.sidebar.header("🔍 Filter Trades")
-ticker_options = ["All"]
-model_options = ["All"]
-
-# Get unique values from the database
-conn = sqlite3.connect(DB_PATH)
-ticker_options += [row[0] for row in conn.execute("SELECT DISTINCT ticker FROM trades ORDER BY ticker").fetchall()]
-model_options += [row[0] for row in conn.execute("SELECT DISTINCT model_group FROM trades ORDER BY model_group").fetchall()]
-conn.close()
-
-ticker = st.sidebar.selectbox("Select Ticker", ticker_options)
-model = st.sidebar.selectbox("Select Model Group", model_options)
-
-# --- QUERY APPROACH SELECTION ---
-query_method = st.sidebar.radio(
-    "LLM Query Method",
-    ["Simple (Direct)", "SQL-Based", "Enhanced SQL"],
-    help="Choose how the LLM will process your query"
-)
+# Apply Tudor theme
+tudor_theme()
 
 # --- LLM QUERY FUNCTIONS WITH THINKING LOG ---
 def ask_direct_llm(prompt, context, thinking_container):
@@ -828,6 +913,66 @@ def ask_enhanced_sql_llm(prompt, filtered_df, thinking_container):
         "sql_results": sql_response.get("results", pd.DataFrame()) if "error" not in sql_response else None
     }
 
+# --- INITIALIZE CLIENTS AND DATABASE ---
+st.title("")  # Empty title to create space for custom header
+
+# Display Tudor logo and header
+display_tudor_logo()
+
+# --- INITIALIZE DATABASE ---
+init_db()
+
+# Check if trades data exists
+if not db_has_data('trades'):
+    with st.spinner("Loading initial trades data..."):
+        load_data_to_db()
+        st.success("Sample data loaded successfully!")
+else:
+    # If trades exist but other data doesn't, load additional data
+    with st.spinner("Checking for additional data..."):
+        if check_and_load_additional_data():
+            st.success("Additional market data loaded successfully!")
+
+# --- INITIALIZE CLIENTS ---
+openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+langchain_llm = ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"], model="gpt-4")
+
+# --- SETUP LANGCHAIN SQL DATABASE ---
+db_url = f"sqlite:///{DB_PATH}"
+db = SQLDatabase.from_uri(db_url)
+
+# --- SIDEBAR FILTERS ---
+with st.sidebar:
+    st.markdown(f"""
+    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin-bottom:15px;">
+        <h3 style="color:white; margin:0; font-size:18px;">Filter Settings</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    ticker_options = ["All"]
+    model_options = ["All"]
+
+    # Get unique values from the database
+    conn = sqlite3.connect(DB_PATH)
+    ticker_options += [row[0] for row in conn.execute("SELECT DISTINCT ticker FROM trades ORDER BY ticker").fetchall()]
+    model_options += [row[0] for row in conn.execute("SELECT DISTINCT model_group FROM trades ORDER BY model_group").fetchall()]
+    conn.close()
+
+    ticker = st.selectbox("Select Ticker", ticker_options)
+    model = st.selectbox("Select Model Group", model_options)
+    
+    st.markdown(f"""
+    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
+        <h3 style="color:white; margin:0; font-size:18px;">LLM Query Settings</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    query_method = st.radio(
+        "Analysis Method",
+        ["Simple (Direct)", "SQL-Based", "Enhanced SQL"],
+        help="Choose how the LLM will process your query"
+    )
+
 # --- GET FILTERED DATA ---
 filtered_df = get_data_from_db(ticker, model)
 
@@ -835,10 +980,16 @@ filtered_df = get_data_from_db(ticker, model)
 insight_text, top_ticker, bottom_ticker, market_return = generate_market_insights()
 
 # --- DISPLAY DATA ---
-# Display market insight
-st.info(insight_text)
+# Display market insight in a stylish card
+st.markdown(f"""
+<div style="background-color:{TUDOR_ACCENT}; padding:15px; border-radius:5px; 
+    border-left:5px solid {TUDOR_BLUE}; margin-bottom:20px;">
+    <h3 style="color:{TUDOR_BLUE}; margin-top:0;">Daily Market Insight</h3>
+    <p style="color:{TUDOR_DARK_BLUE};">{insight_text}</p>
+</div>
+""", unsafe_allow_html=True)
 
-# Create tabs
+# Create styled tabs
 data_tab, news_tab, metrics_tab = st.tabs(["📊 Trade Data", "📰 Market News", "📈 Market Data"])
 
 with data_tab:
@@ -872,13 +1023,54 @@ with metrics_tab:
     total_position = filtered_df['position'].sum()
     avg_alpha = filtered_df['alpha_score'].mean()
     
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total PnL", f"${total_pnl:,.0f}")
-    col2.metric("Net Position", f"${total_position:,.0f}")
-    col3.metric("Avg Alpha Score", f"{avg_alpha:.2f}")
+    # Style metrics with Tudor colors
+    pnl_color = TUDOR_BLUE if total_pnl >= 0 else "#D32F2F"
+    position_color = TUDOR_BLUE if total_position >= 0 else "#D32F2F"
+    
+    metrics_cols = st.columns(3)
+    
+    with metrics_cols[0]:
+        st.markdown(f"""
+        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:5px; text-align:center; 
+            border:1px solid {TUDOR_ACCENT}; height:120px;">
+            <p style="color:{TUDOR_DARK_BLUE}; font-size:14px; margin:0;">Total PnL</p>
+            <h2 style="color:{pnl_color}; margin:10px 0;">${total_pnl:,.0f}</h2>
+            <p style="color:{TUDOR_DARK_BLUE}; font-size:12px; opacity:0.7; margin:0;">
+                All portfolios, filtered view
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with metrics_cols[1]:
+        st.markdown(f"""
+        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:5px; text-align:center; 
+            border:1px solid {TUDOR_ACCENT}; height:120px;">
+            <p style="color:{TUDOR_DARK_BLUE}; font-size:14px; margin:0;">Net Position</p>
+            <h2 style="color:{position_color}; margin:10px 0;">${total_position:,.0f}</h2>
+            <p style="color:{TUDOR_DARK_BLUE}; font-size:12px; opacity:0.7; margin:0;">
+                Current exposure
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with metrics_cols[2]:
+        st.markdown(f"""
+        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:5px; text-align:center; 
+            border:1px solid {TUDOR_ACCENT}; height:120px;">
+            <p style="color:{TUDOR_DARK_BLUE}; font-size:14px; margin:0;">Avg Alpha Score</p>
+            <h2 style="color:{TUDOR_BLUE}; margin:10px 0;">{avg_alpha:.2f}</h2>
+            <p style="color:{TUDOR_DARK_BLUE}; font-size:12px; opacity:0.7; margin:0;">
+                Model performance metric
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Show simulated stock data
-    st.subheader("Simulated Stock Data")
+    st.markdown(f"""
+    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
+        <h3 style="color:white; margin:0; font-size:18px;">Stock Performance Analysis</h3>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Allow user to select ticker for chart
     stock_ticker = st.selectbox("Select Stock for Chart", ticker_options[1:])  # Skip "All"
@@ -892,25 +1084,35 @@ with metrics_tab:
             # Calculate daily returns
             stock_df['daily_return'] = stock_df['close'].pct_change() * 100
             
-            st.subheader(f"{stock_ticker} Stock Performance")
+            # Set custom chart configuration
+            st.markdown(f"""
+            <style>
+            [data-testid="stChart"] {{
+                border: 1px solid {TUDOR_ACCENT};
+                border-radius: 5px;
+                padding: 10px;
+                background-color: white;
+            }}
+            </style>
+            """, unsafe_allow_html=True)
             
-            # Create two columns for price and volume
+            # Create two columns for price and volume charts
             price_col, volume_col = st.columns(2)
             
             with price_col:
+                st.markdown(f"<h4 style='color:{TUDOR_BLUE}; text-align:center;'>{stock_ticker} Price</h4>", unsafe_allow_html=True)
                 st.line_chart(stock_df.set_index('timestamp')['close'], use_container_width=True)
-                st.caption("Closing Price")
             
             with volume_col:
+                st.markdown(f"<h4 style='color:{TUDOR_BLUE}; text-align:center;'>{stock_ticker} Volume</h4>", unsafe_allow_html=True)
                 st.bar_chart(stock_df.set_index('timestamp')['volume'], use_container_width=True)
-                st.caption("Volume")
             
-            # Returns chart
+            # Daily returns chart
+            st.markdown(f"<h4 style='color:{TUDOR_BLUE}; text-align:center;'>{stock_ticker} Daily Returns (%)</h4>", unsafe_allow_html=True)
             st.bar_chart(stock_df.set_index('timestamp')['daily_return'], use_container_width=True)
-            st.caption("Daily Returns (%)")
             
             # Show recent data as table
-            st.subheader("Recent Price Data")
+            st.markdown(f"<h4 style='color:{TUDOR_BLUE};'>Recent Price Data</h4>", unsafe_allow_html=True)
             st.dataframe(stock_df.tail(10)[['timestamp', 'open', 'high', 'low', 'close', 'volume']])
         else:
             st.info(f"No data available for {stock_ticker}")
@@ -950,7 +1152,11 @@ news_prompts = [
 test_prompts.extend(news_prompts)
 
 # --- LLM QUERY INTERFACE ---
-st.subheader("🤖 Ask a Question")
+st.markdown(f"""
+<div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
+    <h3 style="color:white; margin:0; font-size:18px;">LLM Financial Analyst</h3>
+</div>
+""", unsafe_allow_html=True)
 
 # Add dropdown for test prompts
 use_test_prompt = st.checkbox("Use a test prompt", value=False)
@@ -964,58 +1170,79 @@ else:
 # Create a placeholder for the agent thinking log
 thinking_log = st.empty()
 
-if st.button("Ask the TI LLM Agent"):
-    if user_prompt:
-        # Clear previous thinking log
-        thinking_container = st.expander("💡 Agent Thinking Process", expanded=True)
-        
-        with st.spinner("Processing your question..."):
-            if query_method == "Simple (Direct)":
-                # Use the original direct approach
-                sample_data = filtered_df.head(10).to_dict(orient="records")
-                context_text = str(sample_data)
-                answer = ask_direct_llm(user_prompt, context_text, thinking_container)
-                
-                st.success("LLM Response:")
-                st.write(answer)
-                
-            elif query_method == "SQL-Based":
-                # Use the SQL-based approach
-                result = ask_sql_llm(user_prompt, thinking_container)
-                
-                if "error" in result:
-                    st.error(f"Error: {result['error']}")
-                else:
-                    st.success("LLM Response:")
-                    st.write(result["explanation"])
+query_col1, query_col2 = st.columns([3, 1])
+with query_col2:
+    if st.button("Ask the Agent", use_container_width=True):
+        if user_prompt:
+            # Clear previous thinking log
+            thinking_container = st.expander("💡 Agent Thinking Process", expanded=True)
+            
+            with st.spinner("Processing your question..."):
+                if query_method == "Simple (Direct)":
+                    # Use the original direct approach
+                    sample_data = filtered_df.head(10).to_dict(orient="records")
+                    context_text = str(sample_data)
+                    answer = ask_direct_llm(user_prompt, context_text, thinking_container)
                     
-                    with st.expander("View SQL Query"):
-                        st.code(result["sql"], language="sql")
+                    st.markdown(f"""
+                    <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:5px; 
+                        border-left:5px solid {TUDOR_BLUE}; margin:20px 0;">
+                        <h3 style="color:{TUDOR_BLUE}; margin-top:0;">LLM Analysis</h3>
+                        <p style="color:{TUDOR_DARK_BLUE};">{answer}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
-                    with st.expander("View Raw Results"):
-                        st.dataframe(result["results"])
-                
-            else:  # Enhanced SQL
-                # Use the enhanced SQL approach
-                result = ask_enhanced_sql_llm(user_prompt, filtered_df, thinking_container)
-                
-                st.success("LLM Response:")
-                st.write(result["response"])
-                
-                with st.expander("View Technical Details"):
-                    st.subheader("SQL Query")
-                    st.code(result["sql"], language="sql")
+                elif query_method == "SQL-Based":
+                    # Use the SQL-based approach
+                    result = ask_sql_llm(user_prompt, thinking_container)
                     
-                    if result["sql_results"] is not None:
-                        st.subheader("SQL Results")
-                        st.dataframe(result["sql_results"])
+                    if "error" in result:
+                        st.error(f"Error: {result['error']}")
                     else:
-                        st.warning("SQL query execution failed")
-    else:
-        st.warning("Please enter a question.")
+                        st.markdown(f"""
+                        <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:5px; 
+                            border-left:5px solid {TUDOR_BLUE}; margin:20px 0;">
+                            <h3 style="color:{TUDOR_BLUE}; margin-top:0;">LLM Analysis</h3>
+                            <p style="color:{TUDOR_DARK_BLUE};">{result["explanation"]}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        with st.expander("View SQL Query"):
+                            st.code(result["sql"], language="sql")
+                        
+                        with st.expander("View Raw Results"):
+                            st.dataframe(result["results"])
+                    
+                else:  # Enhanced SQL
+                    # Use the enhanced SQL approach
+                    result = ask_enhanced_sql_llm(user_prompt, filtered_df, thinking_container)
+                    
+                    st.markdown(f"""
+                    <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:5px; 
+                        border-left:5px solid {TUDOR_BLUE}; margin:20px 0;">
+                        <h3 style="color:{TUDOR_BLUE}; margin-top:0;">LLM Analysis</h3>
+                        <p style="color:{TUDOR_DARK_BLUE};">{result["response"]}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    with st.expander("View Technical Details"):
+                        st.subheader("SQL Query")
+                        st.code(result["sql"], language="sql")
+                        
+                        if result["sql_results"] is not None:
+                            st.subheader("SQL Results")
+                            st.dataframe(result["sql_results"])
+                        else:
+                            st.warning("SQL query execution failed")
+        else:
+            st.warning("Please enter a question.")
 
 # --- ADD DATA UPLOAD FUNCTIONALITY ---
-st.subheader("📤 Upload Additional Data")
+st.markdown(f"""
+<div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
+    <h3 style="color:white; margin:0; font-size:18px;">Data Management</h3>
+</div>
+""", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("Upload CSV file with trading data", type=["csv"])
 if uploaded_file is not None:
@@ -1037,15 +1264,24 @@ if uploaded_file is not None:
             # Preview data
             st.dataframe(upload_df.head())
             
-            if st.button("Confirm Upload to Database"):
-                with st.spinner("Uploading data..."):
-                    # Insert data into database
-                    conn = sqlite3.connect(DB_PATH)
-                    upload_df.to_sql('trades', conn, if_exists='append', index=False)
-                    conn.commit()
-                    conn.close()
-                    
-                    st.success(f"Successfully uploaded {len(upload_df)} records to the database!")
-                    st.experimental_rerun()
+            upload_col1, upload_col2 = st.columns([3, 1])
+            with upload_col2:
+                if st.button("Confirm Upload", use_container_width=True):
+                    with st.spinner("Uploading data..."):
+                        # Insert data into database
+                        conn = sqlite3.connect(DB_PATH)
+                        upload_df.to_sql('trades', conn, if_exists='append', index=False)
+                        conn.commit()
+                        conn.close()
+                        
+                        st.success(f"Successfully uploaded {len(upload_df)} records to the database!")
+                        st.experimental_rerun()
     except Exception as e:
         st.error(f"Error processing file: {e}")
+
+# --- FOOTER ---
+st.markdown(f"""
+<div style="background-color:{TUDOR_BLUE}; padding:15px; border-radius:5px; margin-top:30px; text-align:center;">
+    <p style="color:white; margin:0;">Tudor Investments LLM Agent © 2025</p>
+</div>
+""", unsafe_allow_html=True)
