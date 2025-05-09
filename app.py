@@ -289,18 +289,8 @@ def get_data_from_db(ticker="All", model_group="All"):
                 "All SQL queries must conform to SQLite3 syntax. Do not use MySQL, PostgreSQL, or other dialect-specific functions (e.g., DATE_SUB, INTERVAL, NOW()). Use SQLite functions such as date('now', '-5 months'), strftime(), and CURRENT_TIMESTAMP."
                 "Return ONLY the SQLLite3 query, with no additional explanation."
                 """E.G. -- Valid SQLite date manipulation
-SELECT 
-    ticker, 
-    timestamp, 
-    close 
-FROM 
-    real_stock_data 
-WHERE 
-    ticker = 'GOLD' AND
-    timestamp >= date('now', '-5 months')
-ORDER BY 
-    timestamp ASC;
-"""
+SELECT * FROM stock_data
+WHERE timestamp >= date('now', '-6 months');"""
 """You are a SQL expert tasked with generating only SQLite3-compatible queries. You must follow all SQLite syntax rules. Do not use functions or syntax from other dialects like MySQL, PostgreSQL, or T-SQL. Use SQLite’s built-in date and string functions (e.g., date(), strftime()). Always use standard ASCII operators (>=, <=, !=) instead of symbols like ≥ or ≠. Avoid unsupported features such as INTERVAL, LIMIT ALL, TOP, ILIKE, WITH RECURSIVE, or stored procedures."""
 """DO NOT EVER ATTEMPT TO USE COLUMNS THAT YOU DO NOT SEE UNDER THE TABLE IN THE SCHEMA PROVIDED TO YOU. IT WILL NOT WORK."""
             )),
@@ -320,6 +310,7 @@ ORDER BY
             "schema": DETAILED_SCHEMA,
             "question": query_description
         })
+        print(chain)
         
         # Execute the query
         df = pd.read_sql(sql_query, conn)
