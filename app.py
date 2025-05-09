@@ -9,15 +9,8 @@ from langchain_openai import ChatOpenAI
 from langchain.chains import create_sql_query_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain.chains import create_extraction_chain
 from langchain_core.messages import SystemMessage
-from langchain.chains import RetrievalQA
-from langchain.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import DataFrameLoader
 from langchain_community.utilities import SQLDatabase
-from langchain_experimental.sql import SQLDatabaseChain
 
 # --- SETUP ---
 st.set_page_config(page_title="TI LLM Agent", layout="wide")
@@ -168,8 +161,6 @@ langchain_llm = ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"], model="gpt-4")
 db_url = f"sqlite:///{DB_PATH}"
 db = SQLDatabase.from_uri(db_url)
 
-# No vector store setup
-
 # --- LLM QUERY FUNCTIONS ---
 def ask_direct_llm(prompt, context):
     """Legacy direct LLM query method"""
@@ -238,7 +229,7 @@ def ask_sql_llm(prompt):
             "sql": "Error generating or executing SQL"
         }
 
-def ask_advanced_llm(prompt, filtered_df):
+def ask_enhanced_sql_llm(prompt, filtered_df):
     """Enhanced SQL-based approach with better context"""
     # Try SQL approach
     sql_response = ask_sql_llm(prompt)
@@ -355,7 +346,7 @@ if st.button("Ask the TI LLM Agent"):
                 
             else:  # Enhanced SQL
                 # Use the enhanced SQL approach
-                result = ask_advanced_llm(user_prompt, filtered_df)
+                result = ask_enhanced_sql_llm(user_prompt, filtered_df)
                 
                 st.success("LLM Response:")
                 st.write(result["response"])
@@ -402,8 +393,6 @@ if uploaded_file is not None:
                     upload_df.to_sql('trades', conn, if_exists='append', index=False)
                     conn.commit()
                     conn.close()
-                    
-                    # No vector store refresh needed
                     
                     st.success(f"Successfully uploaded {len(upload_df)} records to the database!")
                     st.experimental_rerun()
