@@ -19,49 +19,49 @@ Table: trades
 Columns: id INTEGER, ticker TEXT, model_group TEXT, timestamp TIMESTAMP, position REAL, pnl REAL, 
 alpha_score REAL, volatility REAL, sector TEXT, commodity_exposure REAL, interest_rate_sensitivity REAL
 Example data: 
-- (42, 'AAPL', 'Macro Alpha', '2024-02-26 00:00:00', 1733745.23, 25363.96, -0.498, 0.316, 'Energy', 0.791, 0.118)
-- (51, 'MSFT', 'Tech Sector', '2024-01-10 00:00:00', 1896992.83, 198575.93, 1.814, 0.487, 'Technology', 0.237, 0.637)
+- (42, 'AAPL', 'Macro Alpha', '2025-02-26 00:00:00', 1733745.23, 25363.96, -0.498, 0.316, 'Energy', 0.791, 0.118)
+- (51, 'MSFT', 'Tech Sector', '2025-01-10 00:00:00', 1896992.83, 198575.93, 1.814, 0.487, 'Technology', 0.237, 0.637)
 
 Table: economic_indicators
 Columns: id INTEGER, indicator_name TEXT, timestamp TIMESTAMP, value REAL, region TEXT, previous_value REAL
 Example data:
-- (1, 'GDP Growth', '2024-01-15 00:00:00', 2.8, 'US', 2.5)
-- (8, 'Inflation Rate', '2024-02-15 00:00:00', 3.2, 'EU', 3.4)
+- (1, 'GDP Growth', '2025-01-15 00:00:00', 2.8, 'US', 2.5)
+- (8, 'Inflation Rate', '2025-02-15 00:00:00', 3.2, 'EU', 3.4)
 
 Table: historical_trades
 Columns: id INTEGER, ticker TEXT, trade_date TIMESTAMP, action TEXT, quantity INTEGER, price REAL, 
 model_group TEXT, trade_id TEXT
 Example data:
-- (105, 'AAPL', '2024-01-23 00:00:00', 'BUY', 5000, 188.45, 'Macro Alpha', 'TRD-58291')
-- (207, 'NVDA', '2024-02-14 00:00:00', 'SELL', 1200, 721.33, 'Tech Sector', 'TRD-83921')
+- (105, 'AAPL', '2025-01-23 00:00:00', 'BUY', 5000, 188.45, 'Macro Alpha', 'TRD-58291')
+- (207, 'NVDA', '2025-02-14 00:00:00', 'SELL', 1200, 721.33, 'Tech Sector', 'TRD-83921')
 
 Table: market_news
 Columns: id INTEGER, title TEXT, summary TEXT, timestamp TIMESTAMP, source TEXT, url TEXT, 
 tickers TEXT, sentiment REAL, relevance TEXT
 Example data:
-- (24, 'Fed Signals Rate Cuts', 'Federal Reserve hints at potential rate cuts in Q3', '2024-03-20 00:00:00', 'Bloomberg', 'http://example.com/news/24', 'SPY,QQQ,TLT', 0.75, 'High')
-- (31, 'Tech Earnings Beat Expectations', 'Major tech companies report better than expected Q1 earnings', '2024-04-15 00:00:00', 'CNBC', 'http://example.com/news/31', 'AAPL,MSFT,GOOG', 0.82, 'High')
+- (24, 'Fed Signals Rate Cuts', 'Federal Reserve hints at potential rate cuts in Q3', '2025-03-20 00:00:00', 'Bloomberg', 'http://example.com/news/24', 'SPY,QQQ,TLT', 0.75, 'High')
+- (31, 'Tech Earnings Beat Expectations', 'Major tech companies report better than expected Q1 earnings', '2025-04-15 00:00:00', 'CNBC', 'http://example.com/news/31', 'AAPL,MSFT,GOOG', 0.82, 'High')
 
 Table: simulated_stock_data
 Columns: id INTEGER, ticker TEXT, timestamp TIMESTAMP, open REAL, high REAL, low REAL, close REAL, volume INTEGER
 Example data:
-- (1523, 'AAPL', '2024-02-15 00:00:00', 182.45, 184.95, 181.22, 184.37, 75231542)
-- (2871, 'NVDA', '2024-03-22 00:00:00', 875.30, 915.75, 869.44, 908.88, 42567123)
+- (1523, 'AAPL', '2025-02-15 00:00:00', 182.45, 184.95, 181.22, 184.37, 75231542)
+- (2871, 'NVDA', '2025-03-22 00:00:00', 875.30, 915.75, 869.44, 908.88, 42567123)
 
 Table: real_stock_data
 Columns: id INTEGER, ticker TEXT, timestamp TIMESTAMP, open REAL, high REAL, low REAL, close REAL, 
 volume INTEGER, last_refreshed TIMESTAMP
 Example data:
-- (4521, 'AAPL', '2024-04-01 00:00:00', 172.88, 174.30, 170.92, 173.05, 68254123, '2024-04-01 16:00:00')
-- (5782, 'MSFT', '2024-03-15 00:00:00', 415.25, 419.88, 412.55, 418.52, 31254789, '2024-03-15 16:00:00')
+- (4521, 'AAPL', '2025-04-01 00:00:00', 172.88, 174.30, 170.92, 173.05, 68254123, '2025-04-01 16:00:00')
+- (5782, 'MSFT', '2025-03-15 00:00:00', 415.25, 419.88, 412.55, 418.52, 31254789, '2025-03-15 16:00:00')
 
 Table: positions
 Columns: timestamp TIMESTAMP, id INTEGER, position REAL, pnl REAL, alpha_score REAL, volatility REAL, 
 sector TEXT, commodity_exposure REAL, interest_rate_sensitivity REAL
 Example data:
-- ('2024-01-07 00:00:00', 1, -216668.99, -115008.78, -2.01, 0.157, 'Energy', 0.839, 0.173)
-- ('2024-02-06 00:00:00', 2, -1996884.94, 197274.05, -0.493, 0.347, 'Technology', 0.006, 0.691)
-- ('2024-03-27 00:00:00', 3, -400556.11, -133667.02, 0.222, 0.253, 'Materials', 0.657, 0.273)
+- ('2025-01-07 00:00:00', 1, -216668.99, -115008.78, -2.01, 0.157, 'Energy', 0.839, 0.173)
+- ('2025-02-06 00:00:00', 2, -1996884.94, 197274.05, -0.493, 0.347, 'Technology', 0.006, 0.691)
+- ('2025-03-27 00:00:00', 3, -400556.11, -133667.02, 0.222, 0.253, 'Materials', 0.657, 0.273)
 """
 
 # --- DATABASE SETUP ---
@@ -181,7 +181,7 @@ def load_data_to_db():
         trades_data.append({
             "ticker": ticker,
             "model_group": np.random.choice(model_groups),
-            "timestamp": datetime(2024, np.random.randint(1, 5), np.random.randint(1, 29)),
+            "timestamp": datetime(2025, np.random.randint(1, 5), np.random.randint(1, 29)),
             "position": np.random.uniform(-2000000, 2000000),
             "pnl": np.random.uniform(-150000, 200000),
             "alpha_score": np.random.normal(0, 1),
@@ -226,7 +226,7 @@ def load_data_to_db():
                 
                 economic_data.append({
                     "indicator_name": indicator,
-                    "timestamp": datetime(2024, month, 15),
+                    "timestamp": datetime(2025, month, 15),
                     "value": current_value,
                     "region": region,
                     "previous_value": previous_value
@@ -238,7 +238,7 @@ def load_data_to_db():
     
     for ticker in tickers:
         for _ in range(20):  # 20 trades per ticker
-            trade_date = datetime(2024, np.random.randint(1, 5), np.random.randint(1, 29))
+            trade_date = datetime(2025, np.random.randint(1, 5), np.random.randint(1, 29))
             price = 0
             
             # Set price ranges based on ticker
@@ -656,15 +656,15 @@ test_prompts = [
     "Which ticker has the most negative position?",
     "What's the average PnL for trades in the Materials sector?",
     "How does commodity exposure correlate with PnL across different sectors?",
-    "What was the trend of oil prices in the first quarter of 2024?",
-    "Which region had the highest interest rates in March 2024?",
+    "What was the trend of oil prices in the first quarter of 2025?",
+    "Which region had the highest interest rates in March 2025?",
     "What is the distribution of trade sizes for NVDA?",
-    "How have gold prices changed month-over-month in 2024?",
+    "How have gold prices changed month-over-month in 2025?",
     "Compare the performance of the Macro Alpha and Tech Sector model groups",
     "What's the total position value by sector?",
     "Which model has the most consistent alpha score?",
     "Is there a correlation between interest rates and financial sector performance?",
-    "What was the average buy price for Apple stock in Q1 2024?",
+    "What was the average buy price for Apple stock in Q1 2025?",
     "How does consumer confidence relate to position sizes in Consumer Discretionary stocks?",
     "Which commodity-related tickers have the highest volatility?",
     "What is the trend in inflation rates across different regions?",
