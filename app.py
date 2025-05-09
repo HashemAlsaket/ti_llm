@@ -18,404 +18,145 @@ st.set_page_config(page_title="TI LLM Agent", layout="wide")
 # --- DATABASE SETUP ---
 import tempfile
 DB_PATH = os.path.join(tempfile.gettempdir(), "finance_data.db")
+# --- DATABASE SETUP ---
+# Use an in-memory database instead of a file
+DB_PATH = ":memory:"
 
 def init_db():
-    """Initialize SQLite database and create tables if they don't exist"""
-    
-    # Let's try to use multiple possible locations
-    possible_paths = [
-        os.path.join(tempfile.gettempdir(), "finance_data.db"),  # Temp directory
-        os.path.join(os.path.expanduser("~"), "finance_data.db"),  # Home directory
-        "finance_data.db"  # Current directory (original)
-    ]
-    
-    # Try each location until one works
-    for path in possible_paths:
-        try:
-            # Print the path we're trying
-            print(f"Attempting to create database at: {path}")
-            
-            # Remove if exists
-            if os.path.exists(path):
-                print(f"Removing existing database at {path}")
-                os.remove(path)
-                
-            # Try to create and open the database
-            conn = sqlite3.connect(path)
-            cursor = conn.cursor()
-            
-            # Test write access with a simple query
-            cursor.execute("CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY)")
-            conn.commit()
-            
-            print(f"Success! Using database at: {path}")
-            
-            # If we get here, we've found a working path
-            global DB_PATH
-            DB_PATH = path
-            
-            # Continue with your original table creation
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS trades (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticker TEXT NOT NULL,
-                model_group TEXT NOT NULL,
-                timestamp TIMESTAMP NOT NULL,
-                position REAL NOT NULL,
-                pnl REAL NOT NULL,
-                alpha_score REAL NOT NULL,
-                volatility REAL NOT NULL,
-                sector TEXT,
-                asset_class TEXT
-            )
-            ''')
-            
-            # Create commodities table
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS commodities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                commodity_name TEXT NOT NULL,
-                ticker TEXT NOT NULL,
-                timestamp TIMESTAMP NOT NULL,
-                price REAL NOT NULL,
-                volume INTEGER,
-                change_pct REAL,
-                inventory_level REAL,
-                category TEXT
-            )
-            ''')
-            
-            # Create interest_rates table
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS interest_rates (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rate_name TEXT NOT NULL,
-                country TEXT NOT NULL,
-                timestamp TIMESTAMP NOT NULL,
-                rate_value REAL NOT NULL,
-                previous_value REAL,
-                term TEXT,
-                is_central_bank BOOLEAN
-            )
-            ''')
-            
-            # Create real_estate table
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS real_estate (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                property_type TEXT NOT NULL,
-                region TEXT NOT NULL,
-                timestamp TIMESTAMP NOT NULL,
-                price_index REAL NOT NULL,
-                yoy_change_pct REAL,
-                inventory_level INTEGER,
-                avg_days_on_market INTEGER
-            )
-            ''')
-            
-            # Create economic_indicators table
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS economic_indicators (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                indicator_name TEXT NOT NULL,
-                country TEXT NOT NULL,
-                timestamp TIMESTAMP NOT NULL,
-                value REAL NOT NULL,
-                previous_value REAL,
-                unit TEXT,
-                frequency TEXT
-            )
-            ''')
-            
-            conn.commit()
-            conn.close()
-            
-            # Success - break out of the loop
-            break
-            
-        except Exception as e:
-            print(f"Error with path {path}: {str(e)}")
-            continue
-    else:
-        # If we get here, none of the paths worked
-        st.error("Could not initialize database. Please check permissions and disk space.")
-        raise Exception("Failed to initialize database after trying multiple locations")
+    """Initialize in-memory SQLite database and create tables"""
+    try:
+        # Connect to in-memory database
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Print for debugging
+        print("Connected to in-memory database")
+        
+        # Create trades table (minimal)
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            model_group TEXT NOT NULL,
+            timestamp TIMESTAMP NOT NULL,
+            position REAL NOT NULL,
+            pnl REAL NOT NULL,
+            alpha_score REAL NOT NULL,
+            volatility REAL NOT NULL,
+            sector TEXT,
+            asset_class TEXT
+        )
+        ''')
+        
+        # Only create the essential tables (removing others to minimize complexity)
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS commodities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            commodity_name TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            timestamp TIMESTAMP NOT NULL,
+            price REAL NOT NULL,
+            category TEXT
+        )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        print("Database initialization successful!")
+        
+        # Store a flag in session state to indicate the database is initialized
+        st.session_state["db_initialized"] = True
+        
+    except Exception as e:
+        print(f"Database initialization error: {str(e)}")
+        st.error(f"Could not initialize database: {str(e)}")
+        raise e
+
+def get_connection():
+    """Get a connection to the in-memory database"""
+    if "db_conn" not in st.session_state:
+        st.session_state.db_conn = sqlite3.connect(DB_PATH)
+    return st.session_state.db_conn
 
 def db_is_empty():
     """Check if database is empty"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Check main tables
-    cursor.execute("SELECT COUNT(*) FROM trades")
-    trades_count = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='commodities'")
-    commodities_table_exists = cursor.fetchone()[0] > 0
-    
-    if commodities_table_exists:
-        cursor.execute("SELECT COUNT(*) FROM commodities")
-        commodities_count = cursor.fetchone()[0]
-    else:
-        commodities_count = 0
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
         
-    conn.close()
-    return trades_count == 0 or commodities_count == 0
+        # Check trades table
+        cursor.execute("SELECT COUNT(*) FROM trades")
+        trades_count = cursor.fetchone()[0]
+        
+        return trades_count == 0
+    except Exception as e:
+        print(f"Error checking if DB is empty: {str(e)}")
+        return True
 
 def load_data_to_db():
-    """Generate mock data and load into SQLite database"""
-    np.random.seed(42)
-    
-    # --- TRADES DATA ---
-    # Enhanced tickers list including various asset classes - REDUCED
-    tickers = {
-        'Equities': ['AAPL', 'MSFT', 'GOOG'],
-        'ETFs': ['SPY', 'QQQ'],
-        'Bonds': ['TLT', 'IEF'],
-        'Forex': ['EUR/USD', 'GBP/USD'],
-        'Crypto': ['BTC/USD', 'ETH/USD']
-    }
-    
-    # Enhanced model groups - REDUCED
-    model_groups = ['Macro Alpha', 'Q1 Equity', 'Commodities Signal', 'Rates Momentum']
-    
-    # Enhanced sectors - REDUCED
-    sectors = ['Technology', 'Healthcare', 'Financials', 'Energy', 'Materials']
-    
-    # Flatten tickers for random selection
-    all_tickers = []
-    for asset_class, ticker_list in tickers.items():
-        for ticker in ticker_list:
-            all_tickers.append((ticker, asset_class))
-    
-    trades_data = []
-    # REDUCED number of trades from 1000 to 50
-    for _ in range(50):
-        chosen_index = np.random.randint(0, len(all_tickers))
-        ticker, asset_class = all_tickers[chosen_index]
+    """Generate minimal mock data and load into SQLite database"""
+    try:
+        conn = get_connection()
         
-        # Assign sectors based on ticker (simplified logic)
-        if ticker in ['AAPL', 'MSFT', 'GOOG']:
-            sector = 'Technology'
-        elif ticker in ['JPM', 'BAC'] or asset_class == 'Bonds':
-            sector = 'Financials'
-        else:
-            # Fix for numpy.random.choice
-            sector = sectors[np.random.randint(0, len(sectors))]
+        # Just 5 trades
+        trades_data = [
+            {"ticker": "AAPL", "model_group": "Macro Alpha", "timestamp": datetime.now(), "position": 1000000, "pnl": 50000, "alpha_score": 0.5, "volatility": 0.2, "sector": "Technology", "asset_class": "Equities"},
+            {"ticker": "MSFT", "model_group": "Q1 Equity", "timestamp": datetime.now(), "position": 1500000, "pnl": 75000, "alpha_score": 0.6, "volatility": 0.25, "sector": "Technology", "asset_class": "Equities"},
+            {"ticker": "SPY", "model_group": "Rates Momentum", "timestamp": datetime.now(), "position": -500000, "pnl": -25000, "alpha_score": -0.3, "volatility": 0.15, "sector": "Financials", "asset_class": "ETFs"},
+            {"ticker": "TLT", "model_group": "Rates Momentum", "timestamp": datetime.now(), "position": 800000, "pnl": 40000, "alpha_score": 0.4, "volatility": 0.1, "sector": "Financials", "asset_class": "Bonds"},
+            {"ticker": "BTC/USD", "model_group": "Technical Breakout", "timestamp": datetime.now(), "position": 300000, "pnl": 100000, "alpha_score": 0.8, "volatility": 0.4, "sector": "Technology", "asset_class": "Crypto"}
+        ]
         
-        # Generate the trade data
-        trades_data.append({
-            "ticker": ticker,
-            "model_group": model_groups[np.random.randint(0, len(model_groups))],
-            "timestamp": datetime(2024, np.random.randint(1, 3), np.random.randint(1, 15)),
-            "position": np.random.uniform(-2000000, 2000000),
-            "pnl": np.random.uniform(-200000, 300000),
-            "alpha_score": np.random.normal(0, 1),
-            "volatility": np.random.uniform(0.05, 0.5),
-            "sector": sector,
-            "asset_class": asset_class
-        })
-    
-    # --- COMMODITIES DATA --- REDUCED
-    commodities = [
-        # Reduced to just a few commodities
-        ('Crude Oil WTI', 'CL=F', 'Energy'),
-        ('Gold', 'GC=F', 'Precious Metals'),
-        ('Corn', 'ZC=F', 'Agriculture')
-    ]
-    
-    commodities_data = []
-    
-    # Generate 1 month of data (instead of 3 months)
-    for commodity_name, ticker, category in commodities:
-        # Set base price based on commodity
-        if category == 'Energy':
-            base_price = 70.0
-        elif category == 'Precious Metals':
-            base_price = 1900.0
-        else:  # Agriculture
-            base_price = 10.0
+        # Just 3 commodities
+        commodities_data = [
+            {"commodity_name": "Crude Oil WTI", "ticker": "CL=F", "timestamp": datetime.now(), "price": 75.0, "category": "Energy"},
+            {"commodity_name": "Gold", "ticker": "GC=F", "timestamp": datetime.now(), "price": 1900.0, "category": "Precious Metals"},
+            {"commodity_name": "Corn", "ticker": "ZC=F", "timestamp": datetime.now(), "price": 12.0, "category": "Agriculture"}
+        ]
         
-        # Reduced from 90 days to 15 days
-        for days_ago in range(15, 0, -1):
-            date = datetime.now() - timedelta(days=days_ago)
-            daily_change = np.random.normal(0, 0.02)
-            price = base_price * (1 + daily_change)
-            
-            commodities_data.append({
-                "commodity_name": commodity_name,
-                "ticker": ticker,
-                "timestamp": date,
-                "price": price,
-                "volume": int(np.random.uniform(50000, 200000)),
-                "change_pct": daily_change * 100,
-                "inventory_level": np.random.uniform(100000, 400000),
-                "category": category
-            })
-    
-    # --- INTEREST RATES DATA --- REDUCED
-    interest_rates_info = [
-        # Just a few key rates
-        ('Federal Funds Rate', 'US', 'Overnight', True),
-        ('ECB Main Refinancing Rate', 'EU', 'Overnight', True),
-        ('US Treasury Yield', 'US', '10-Year', False)
-    ]
-    
-    interest_rates_data = []
-    
-    for rate_name, country, term, is_central_bank in interest_rates_info:
-        # Simplified rate assignment
-        if is_central_bank:
-            base_rate = 4.5 if country == 'US' else 3.75
-        else:
-            base_rate = 4.0
+        # Insert data directly, simplifying the process
+        trades_df = pd.DataFrame(trades_data)
+        trades_df.to_sql('trades', conn, if_exists='append', index=False)
         
-        # Reduced from 12 months to 4 months
-        for month in range(4, 0, -1):
-            date = datetime.now().replace(day=15) - timedelta(days=month*30)
-            
-            # Previous month's value
-            if month == 4:
-                previous_value = base_rate - 0.1
-            else:
-                previous_value = current_value
-            
-            # Current month's value - simplified
-            rate_change = 0.05 if np.random.random() > 0.7 else 0
-            current_value = previous_value + rate_change
-            
-            interest_rates_data.append({
-                "rate_name": rate_name,
-                "country": country,
-                "timestamp": date,
-                "rate_value": current_value,
-                "previous_value": previous_value,
-                "term": term,
-                "is_central_bank": 1 if is_central_bank else 0
-            })
-    
-    # --- REAL ESTATE DATA --- REDUCED
-    real_estate_info = [
-        # Just a few key property types
-        ('Single Family', 'US-National', 'Residential'),
-        ('Office', 'US-National', 'Commercial')
-    ]
-    
-    real_estate_data = []
-    
-    for property_type, region, category in real_estate_info:
-        base_index = 200.0 if category == 'Residential' else 180.0
+        commodities_df = pd.DataFrame(commodities_data)
+        commodities_df.to_sql('commodities', conn, if_exists='append', index=False)
         
-        # Just 2 quarters instead of 8
-        for quarter in range(2, 0, -1):
-            date = datetime(2024, quarter * 3, 15)
-            price_index = base_index * (1 + (quarter * 0.01))
-            yoy_change = 2.5  # Simplified
-            avg_days = 45 if category == 'Residential' else 90
-            
-            real_estate_data.append({
-                "property_type": property_type,
-                "region": region,
-                "timestamp": date,
-                "price_index": price_index,
-                "yoy_change_pct": yoy_change,
-                "inventory_level": 10000,
-                "avg_days_on_market": avg_days
-            })
-    
-    # --- ECONOMIC INDICATORS DATA --- REDUCED
-    economic_indicators_info = [
-        # Just a few key indicators
-        ('GDP Growth Rate', 'US', '%', 'Quarterly'),
-        ('CPI', 'US', '%', 'Monthly'),
-        ('Unemployment Rate', 'US', '%', 'Monthly')
-    ]
-    
-    economic_data = []
-    
-    for indicator_name, country, unit, frequency in economic_indicators_info:
-        # Simplified values
-        if indicator_name == 'GDP Growth Rate':
-            base_value = 2.5
-        elif indicator_name == 'CPI':
-            base_value = 3.0
-        else:  # Unemployment
-            base_value = 4.0
+        conn.commit()
+        print("Data loaded successfully!")
         
-        # Reduced from 24/8 periods to just 3
-        periods = 3
-        days_per_period = 30 if frequency == 'Monthly' else 90
+        return trades_df
         
-        for period in range(periods, 0, -1):
-            date = datetime.now() - timedelta(days=period*days_per_period)
-            
-            if period == periods:
-                previous_value = base_value - 0.1
-            else:
-                previous_value = current_value
-            
-            current_value = previous_value + np.random.normal(0, 0.1)
-            
-            economic_data.append({
-                "indicator_name": indicator_name,
-                "country": country,
-                "timestamp": date,
-                "value": current_value,
-                "previous_value": previous_value,
-                "unit": unit,
-                "frequency": frequency
-            })
-    
-    # Insert data into database
-    conn = sqlite3.connect(DB_PATH)
-    
-    # Insert trades data
-    trades_df = pd.DataFrame(trades_data)
-    trades_df.to_sql('trades', conn, if_exists='append', index=False)
-    
-    # Insert commodities data
-    commodities_df = pd.DataFrame(commodities_data)
-    commodities_df.to_sql('commodities', conn, if_exists='append', index=False)
-    
-    # Insert interest rates data
-    interest_rates_df = pd.DataFrame(interest_rates_data)
-    interest_rates_df.to_sql('interest_rates', conn, if_exists='append', index=False)
-    
-    # Insert real estate data
-    real_estate_df = pd.DataFrame(real_estate_data)
-    real_estate_df.to_sql('real_estate', conn, if_exists='append', index=False)
-    
-    # Insert economic indicators data
-    economic_df = pd.DataFrame(economic_data)
-    economic_df.to_sql('economic_indicators', conn, if_exists='append', index=False)
-    
-    conn.commit()
-    conn.close()
-    
-    return trades_df
+    except Exception as e:
+        print(f"Error loading data: {str(e)}")
+        st.error(f"Failed to load sample data: {str(e)}")
+        return pd.DataFrame()
 
 def get_data_from_db(ticker="All", model_group="All"):
     """Fetch data from SQLite database with optional filters"""
-    conn = sqlite3.connect(DB_PATH)
-    
-    query = "SELECT * FROM trades"
-    params = []
-    
-    # Add filters if specified
-    where_clauses = []
-    if ticker != "All":
-        where_clauses.append("ticker = ?")
-        params.append(ticker)
-    if model_group != "All":
-        where_clauses.append("model_group = ?")
-        params.append(model_group)
-    
-    if where_clauses:
-        query += " WHERE " + " AND ".join(where_clauses)
-    
-    df = pd.read_sql(query, conn, params=params)
-    conn.close()
-    return df
+    try:
+        conn = get_connection()
+        
+        query = "SELECT * FROM trades"
+        params = []
+        
+        # Add filters if specified
+        where_clauses = []
+        if ticker != "All":
+            where_clauses.append("ticker = ?")
+            params.append(ticker)
+        if model_group != "All":
+            where_clauses.append("model_group = ?")
+            params.append(model_group)
+        
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+        
+        df = pd.read_sql(query, conn, params=params)
+        return df
+    except Exception as e:
+        print(f"Error fetching data: {str(e)}")
+        st.error(f"Error fetching data: {str(e)}")
+        return pd.DataFrame()
 
 def get_detailed_db_schema():
     """Get a detailed database schema description for better LLM context"""
