@@ -271,7 +271,7 @@ def load_data_to_db():
     np.random.seed(42)
     
     # Generate trades data
-    tickers = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA', 'XOM', 'CVX', 'BP', 'GOLD', 'NEM', 'RIO', 'VALE', 'USO', 'SILVER']
+    tickers = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA', 'XOM', 'CVX', 'BP', 'SPY', 'GLD', 'GOLD', 'NEM', 'RIO', 'VALE', 'USO', 'SILVER']
     model_groups = ['Macro Alpha', 'Q1 Equity', 'Commodities Signal', 'Rates Momentum', 'Tech Sector', 'Energy Focus', 'Mining Beta']
     sectors = ['Technology', 'Energy', 'Materials', 'Consumer Discretionary', 'Financial Services']
     
@@ -284,7 +284,7 @@ def load_data_to_db():
             sector = 'Technology'
         elif ticker in ['XOM', 'CVX', 'BP', 'USO']:
             sector = 'Energy'
-        elif ticker in ['GOLD', 'NEM', 'RIO', 'VALE', 'SILVER']:
+        elif ticker in ['GOLD', 'GLD', 'NEM', 'RIO', 'VALE', 'SILVER']:
             sector = 'Materials'
         else:
             sector = np.random.choice(sectors)
