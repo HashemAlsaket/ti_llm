@@ -291,7 +291,6 @@ def get_data_from_db(ticker="All", model_group="All"):
                 """E.G. -- Valid SQLite date manipulation
 SELECT * FROM stock_data
 WHERE timestamp >= date('now', '-6 months');"""
-"""You are a SQL expert tasked with generating only SQLite3-compatible queries. You must follow all SQLite syntax rules. Do not use functions or syntax from other dialects like MySQL, PostgreSQL, or T-SQL. Use SQLite’s built-in date and string functions (e.g., date(), strftime()). Always use standard ASCII operators (>=, <=, !=) instead of symbols like ≥ or ≠. Avoid unsupported features such as INTERVAL, LIMIT ALL, TOP, ILIKE, WITH RECURSIVE, or stored procedures."""
 """DO NOT EVER ATTEMPT TO USE COLUMNS THAT YOU DO NOT SEE UNDER THE TABLE IN THE SCHEMA PROVIDED TO YOU. IT WILL NOT WORK."""
             )),
             ("human", """
@@ -303,6 +302,7 @@ WHERE timestamp >= date('now', '-6 months');"""
             Please generate a SQL query to answer this question:
             """)
         ])
+        print("sql_generation_prompt: ", sql_generation_prompt)
         
         # Generate SQL query using the custom prompt
         chain = sql_generation_prompt | langchain_llm | StrOutputParser()
@@ -310,7 +310,6 @@ WHERE timestamp >= date('now', '-6 months');"""
             "schema": DETAILED_SCHEMA,
             "question": query_description
         })
-        print(chain)
         
         # Execute the query
         df = pd.read_sql(sql_query, conn)
