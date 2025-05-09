@@ -294,12 +294,13 @@ SELECT
     timestamp, 
     close 
 FROM 
-    simulated_stock_data 
+    real_stock_data 
 WHERE 
     ticker = 'GOLD' AND
     timestamp >= date('now', '-5 months')
 ORDER BY 
-    timestamp DESC;"""
+    timestamp ASC;
+"""
 """You are a SQL expert tasked with generating only SQLite3-compatible queries. You must follow all SQLite syntax rules. Do not use functions or syntax from other dialects like MySQL, PostgreSQL, or T-SQL. Use SQLite’s built-in date and string functions (e.g., date(), strftime()). Always use standard ASCII operators (>=, <=, !=) instead of symbols like ≥ or ≠. Avoid unsupported features such as INTERVAL, LIMIT ALL, TOP, ILIKE, WITH RECURSIVE, or stored procedures."""
 """DO NOT EVER ATTEMPT TO USE COLUMNS THAT YOU DO NOT SEE UNDER THE TABLE IN THE SCHEMA PROVIDED TO YOU. IT WILL NOT WORK."""
             )),
