@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import sqlite3
 import os
 import time
-import base64
+import json
 from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain.chains import create_sql_query_chain
@@ -23,7 +23,7 @@ TUDOR_BG = "#F0F2F6"
 TUDOR_WHITE = "#FFFFFF"
 TUDOR_ACCENT = "#D4E0F0"
 
-# Custom CSS for Tudor theme
+# Custom CSS for Tudor theme with sharper edges
 def tudor_theme():
     st.markdown(f"""
     <style>
@@ -36,56 +36,76 @@ def tudor_theme():
     h1, h2, h3, h4, h5, h6 {{
         color: {TUDOR_BLUE};
     }}
+    /* Sharper buttons with more contrast */
     .stButton>button {{
         background-color: {TUDOR_BLUE};
         color: white;
-        border-radius: 4px;
+        border-radius: 2px !important;
         border: none;
         padding: 0.5rem 1rem;
         font-weight: 500;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }}
     .stButton>button:hover {{
         background-color: {TUDOR_DARK_BLUE};
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }}
+    /* Sharper tabs */
     .stTabs [data-baseweb="tab-list"] {{
-        gap: 2px;
+        gap: 0px;
     }}
     .stTabs [data-baseweb="tab"] {{
         background-color: {TUDOR_ACCENT};
         color: {TUDOR_BLUE};
-        border-radius: 4px 4px 0 0;
+        border-radius: 2px 2px 0 0;
         padding: 0.5rem 1rem;
-        border: none;
+        border: 1px solid #cccccc;
+        border-bottom: none;
+        margin-right: 2px;
     }}
     .stTabs [aria-selected="true"] {{
         background-color: {TUDOR_BLUE};
         color: white;
     }}
-    .stSelectbox label, .stMultiselect label {{
+    /* Sharper select boxes */
+    .stSelectbox, .stTextInput, .stTextArea {{
+        border: 1px solid #cccccc !important;
+    }}
+    .stSelectbox label, .stMultiselect label, .stTextInput label, .stTextArea label {{
         color: {TUDOR_BLUE};
         font-weight: 500;
     }}
+    div[data-baseweb="select"] {{
+        border-radius: 2px;
+    }}
+    div[data-baseweb="base-input"] {{
+        border-radius: 2px;
+    }}
+    /* Sharper expanders */
     div[data-testid="stExpander"] details summary {{
         background-color: {TUDOR_ACCENT};
         color: {TUDOR_BLUE};
-        border-radius: 4px;
+        border-radius: 2px;
+        border: 1px solid #cccccc;
     }}
     div[data-testid="stExpander"] details[open] summary {{
         background-color: {TUDOR_BLUE};
         color: white;
-        border-radius: 4px 4px 0 0;
+        border-radius: 2px 2px 0 0;
     }}
     div[data-testid="stExpander"] details {{
         background-color: {TUDOR_WHITE};
-        border-radius: 4px;
-        border: 1px solid {TUDOR_ACCENT};
+        border-radius: 2px;
+        border: 1px solid #cccccc;
     }}
+    /* Sharper dataframes and tables */
     .stDataFrame, .stTable {{
-        border: 1px solid {TUDOR_ACCENT};
-        border-radius: 4px;
+        border: 1px solid #cccccc;
+        border-radius: 2px;
     }}
+    /* Sharper alerts */
     .stAlert {{
-        border-radius: 4px;
+        border-radius: 2px;
     }}
     .success {{
         background-color: #D6EFC7;
@@ -95,12 +115,37 @@ def tudor_theme():
         background-color: {TUDOR_ACCENT};
         border-left-color: {TUDOR_BLUE};
     }}
+    /* Sharper inputs */
     .stTextArea textarea, .stTextInput input {{
-        border-radius: 4px;
-        border-color: {TUDOR_LIGHT_BLUE};
+        border-radius: 2px;
+        border: 1px solid #cccccc;
     }}
-    .css-ch5dnh {{
-        color: {TUDOR_BLUE};
+    /* More distinct text fields with borders */
+    [data-testid="stForm"] {{
+        border: 1px solid #cccccc;
+        border-radius: 2px;
+        padding: 10px;
+    }}
+    /* Improved file uploader */
+    .stFileUploader div[data-testid="stFileUploadDropzone"] {{
+        border-radius: 2px;
+        border: 1px solid #cccccc;
+    }}
+    /* Make selection clearer */
+    div[data-baseweb="select"] > div:first-child {{
+        background-color: white;
+        border: 1px solid #cccccc;
+        border-radius: 2px;
+    }}
+    /* Clearer text input */
+    .stTextInput input, .stTextArea textarea {{
+        background-color: white;
+        border: 1px solid #cccccc;
+        border-radius: 2px;
+    }}
+    /* Sharper cards */
+    div.element-container div.stMarkdown {{
+        border-radius: 2px;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -709,8 +754,8 @@ def generate_market_insights():
 # --- TUDOR LOGO DISPLAY FUNCTION ---
 def display_tudor_logo():
     st.markdown(f"""
-    <div style="background-color:{TUDOR_BLUE}; padding:10px; border-radius:5px; margin-bottom:20px; 
-        display:flex; align-items:center; justify-content:center;">
+    <div style="background-color:{TUDOR_BLUE}; padding:10px; border-radius:2px; margin-bottom:20px; 
+        display:flex; align-items:center; justify-content:center; border:1px solid #0A2A4A;">
         <div style="background-color:white; width:40px; height:40px; border-radius:50%; 
             display:flex; align-items:center; justify-content:center; margin-right:10px;">
             <span style="color:{TUDOR_BLUE}; font-size:24px; font-weight:bold;">T</span>
@@ -731,8 +776,8 @@ def login():
     
     st.markdown(f"""
     <div style="display:flex; justify-content:center; margin-top:50px;">
-        <div style="background-color:{TUDOR_WHITE}; border-radius:10px; padding:30px; 
-                box-shadow:0 4px 6px rgba(0,0,0,0.1); width:400px;">
+        <div style="background-color:{TUDOR_WHITE}; border-radius:2px; padding:30px; 
+                box-shadow:0 2px 4px rgba(0,0,0,0.1); width:400px; border:1px solid #cccccc;">
             <h2 style="color:{TUDOR_BLUE}; text-align:center; margin-bottom:20px;">
                 Sign in to Tudor LLM Agent
             </h2>
@@ -773,7 +818,27 @@ def ask_direct_llm(prompt, context, thinking_container):
     time.sleep(0.5)
     
     thinking_container.write("📊 **Data Sample:**")
-    thinking_container.json(context[:500] + "..." if len(context) > 500 else context)
+    
+    # Fix for JSON display - ensure valid JSON formatting
+    try:
+        # Convert to a safe, serializable format
+        if isinstance(context, str):
+            # If it's already a string, try to format it
+            try:
+                parsed_json = json.loads(context)
+                formatted_json = json.dumps(parsed_json, indent=2)
+                thinking_container.code(formatted_json[:500] + "..." if len(formatted_json) > 500 else formatted_json, language="json")
+            except json.JSONDecodeError:
+                # If it's not valid JSON, just show as text
+                thinking_container.text(context[:500] + "..." if len(context) > 500 else context)
+        else:
+            # If it's not a string, convert to formatted JSON
+            formatted_json = json.dumps(context, default=str, indent=2)
+            thinking_container.code(formatted_json[:500] + "..." if len(formatted_json) > 500 else formatted_json, language="json")
+    except Exception as e:
+        thinking_container.text(f"Unable to display data sample: {str(e)}")
+        thinking_container.text(str(context)[:200] + "..." if len(str(context)) > 200 else str(context))
+    
     time.sleep(1)
     
     system_prompt = (
@@ -784,11 +849,17 @@ def ask_direct_llm(prompt, context, thinking_container):
     thinking_container.write("🤔 **Processing Query:** Analyzing data to find patterns and insights...")
     time.sleep(1)
 
+    # Ensure context is properly formatted for API
+    if isinstance(context, (dict, list)):
+        context_str = json.dumps(context, default=str)
+    else:
+        context_str = str(context)
+
     response = openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Data context: {context}\n\nUser question: {prompt}"},
+            {"role": "user", "content": f"Data context: {context_str}\n\nUser question: {prompt}"},
         ],
         temperature=0.2,
         max_tokens=500
@@ -981,7 +1052,7 @@ db = SQLDatabase.from_uri(db_url)
 # --- SIDEBAR FILTERS ---
 with st.sidebar:
     st.markdown(f"""
-    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin-bottom:15px;">
+    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:2px; margin-bottom:15px; border:1px solid #0A2A4A;">
         <h3 style="color:white; margin:0; font-size:18px;">Filter Settings</h3>
     </div>
     """, unsafe_allow_html=True)
@@ -999,7 +1070,7 @@ with st.sidebar:
     model = st.selectbox("Select Model Group", model_options)
     
     st.markdown(f"""
-    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
+    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:2px; margin:20px 0 15px 0; border:1px solid #0A2A4A;">
         <h3 style="color:white; margin:0; font-size:18px;">LLM Query Settings</h3>
     </div>
     """, unsafe_allow_html=True)
@@ -1019,8 +1090,8 @@ insight_text, top_ticker, bottom_ticker, market_return = generate_market_insight
 # --- DISPLAY DATA ---
 # Display market insight in a stylish card
 st.markdown(f"""
-<div style="background-color:{TUDOR_ACCENT}; padding:15px; border-radius:5px; 
-    border-left:5px solid {TUDOR_BLUE}; margin-bottom:20px;">
+<div style="background-color:{TUDOR_ACCENT}; padding:15px; border-radius:2px; 
+    border-left:5px solid {TUDOR_BLUE}; margin-bottom:20px; border:1px solid #cccccc;">
     <h3 style="color:{TUDOR_BLUE}; margin-top:0;">Daily Market Insight</h3>
     <p style="color:{TUDOR_DARK_BLUE};">{insight_text}</p>
 </div>
@@ -1068,8 +1139,8 @@ with metrics_tab:
     
     with metrics_cols[0]:
         st.markdown(f"""
-        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:5px; text-align:center; 
-            border:1px solid {TUDOR_ACCENT}; height:120px;">
+        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:2px; text-align:center; 
+            border:1px solid #cccccc; height:120px;">
             <p style="color:{TUDOR_DARK_BLUE}; font-size:14px; margin:0;">Total PnL</p>
             <h2 style="color:{pnl_color}; margin:10px 0;">${total_pnl:,.0f}</h2>
             <p style="color:{TUDOR_DARK_BLUE}; font-size:12px; opacity:0.7; margin:0;">
@@ -1080,8 +1151,8 @@ with metrics_tab:
     
     with metrics_cols[1]:
         st.markdown(f"""
-        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:5px; text-align:center; 
-            border:1px solid {TUDOR_ACCENT}; height:120px;">
+        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:2px; text-align:center; 
+            border:1px solid #cccccc; height:120px;">
             <p style="color:{TUDOR_DARK_BLUE}; font-size:14px; margin:0;">Net Position</p>
             <h2 style="color:{position_color}; margin:10px 0;">${total_position:,.0f}</h2>
             <p style="color:{TUDOR_DARK_BLUE}; font-size:12px; opacity:0.7; margin:0;">
@@ -1092,8 +1163,8 @@ with metrics_tab:
     
     with metrics_cols[2]:
         st.markdown(f"""
-        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:5px; text-align:center; 
-            border:1px solid {TUDOR_ACCENT}; height:120px;">
+        <div style="background-color:{TUDOR_WHITE}; padding:15px; border-radius:2px; text-align:center; 
+            border:1px solid #cccccc; height:120px;">
             <p style="color:{TUDOR_DARK_BLUE}; font-size:14px; margin:0;">Avg Alpha Score</p>
             <h2 style="color:{TUDOR_BLUE}; margin:10px 0;">{avg_alpha:.2f}</h2>
             <p style="color:{TUDOR_DARK_BLUE}; font-size:12px; opacity:0.7; margin:0;">
@@ -1104,7 +1175,7 @@ with metrics_tab:
     
     # Show simulated stock data
     st.markdown(f"""
-    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
+    <div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:2px; margin:20px 0 15px 0; border:1px solid #0A2A4A;">
         <h3 style="color:white; margin:0; font-size:18px;">Stock Performance Analysis</h3>
     </div>
     """, unsafe_allow_html=True)
@@ -1125,8 +1196,8 @@ with metrics_tab:
             st.markdown(f"""
             <style>
             [data-testid="stChart"] {{
-                border: 1px solid {TUDOR_ACCENT};
-                border-radius: 5px;
+                border: 1px solid #cccccc;
+                border-radius: 2px;
                 padding: 10px;
                 background-color: white;
             }}
@@ -1190,9 +1261,14 @@ test_prompts.extend(news_prompts)
 
 # --- LLM QUERY INTERFACE ---
 st.markdown(f"""
-<div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
+<div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:2px; margin:20px 0 15px 0; border:1px solid #0A2A4A;">
     <h3 style="color:white; margin:0; font-size:18px;">LLM Financial Analyst</h3>
 </div>
+""", unsafe_allow_html=True)
+
+# Query container with clear borders
+st.markdown(f"""
+<div style="background-color:white; border:1px solid #cccccc; border-radius:2px; padding:15px; margin-bottom:20px;">
 """, unsafe_allow_html=True)
 
 # Add dropdown for test prompts
@@ -1218,12 +1294,12 @@ with query_col2:
                 if query_method == "Simple (Direct)":
                     # Use the original direct approach
                     sample_data = filtered_df.head(10).to_dict(orient="records")
-                    context_text = str(sample_data)
+                    context_text = sample_data  # Pass as object, not string
                     answer = ask_direct_llm(user_prompt, context_text, thinking_container)
                     
                     st.markdown(f"""
-                    <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:5px; 
-                        border-left:5px solid {TUDOR_BLUE}; margin:20px 0;">
+                    <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:2px; 
+                        border-left:5px solid {TUDOR_BLUE}; margin:20px 0; border:1px solid #cccccc;">
                         <h3 style="color:{TUDOR_BLUE}; margin-top:0;">LLM Analysis</h3>
                         <p style="color:{TUDOR_DARK_BLUE};">{answer}</p>
                     </div>
@@ -1237,8 +1313,8 @@ with query_col2:
                         st.error(f"Error: {result['error']}")
                     else:
                         st.markdown(f"""
-                        <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:5px; 
-                            border-left:5px solid {TUDOR_BLUE}; margin:20px 0;">
+                        <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:2px; 
+                            border-left:5px solid {TUDOR_BLUE}; margin:20px 0; border:1px solid #cccccc;">
                             <h3 style="color:{TUDOR_BLUE}; margin-top:0;">LLM Analysis</h3>
                             <p style="color:{TUDOR_DARK_BLUE};">{result["explanation"]}</p>
                         </div>
@@ -1255,8 +1331,8 @@ with query_col2:
                     result = ask_enhanced_sql_llm(user_prompt, filtered_df, thinking_container)
                     
                     st.markdown(f"""
-                    <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:5px; 
-                        border-left:5px solid {TUDOR_BLUE}; margin:20px 0;">
+                    <div style="background-color:{TUDOR_WHITE}; padding:20px; border-radius:2px; 
+                        border-left:5px solid {TUDOR_BLUE}; margin:20px 0; border:1px solid #cccccc;">
                         <h3 style="color:{TUDOR_BLUE}; margin-top:0;">LLM Analysis</h3>
                         <p style="color:{TUDOR_DARK_BLUE};">{result["response"]}</p>
                     </div>
@@ -1274,14 +1350,24 @@ with query_col2:
         else:
             st.warning("Please enter a question.")
 
+# Close query container
+st.markdown("</div>", unsafe_allow_html=True)
+
 # --- ADD DATA UPLOAD FUNCTIONALITY ---
 st.markdown(f"""
-<div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:5px; margin:20px 0 15px 0;">
+<div style="padding:10px; background-color:{TUDOR_BLUE}; border-radius:2px; margin:20px 0 15px 0; border:1px solid #0A2A4A;">
     <h3 style="color:white; margin:0; font-size:18px;">Data Management</h3>
 </div>
 """, unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("Upload CSV file with trading data", type=["csv"])
+# Upload container with clear borders
+st.markdown(f"""
+<div style="background-color:white; border:1px solid #cccccc; border-radius:2px; padding:15px; margin-bottom:20px;">
+""", unsafe_allow_html=True)
+
+# File uploader with clear styling
+uploaded_file = st.file_uploader("Upload CSV file with trading data", type=["csv"], 
+                                help="Upload a CSV file containing additional trade data")
 if uploaded_file is not None:
     # Read uploaded CSV
     try:
@@ -1298,8 +1384,14 @@ if uploaded_file is not None:
             if not pd.api.types.is_datetime64_any_dtype(upload_df["timestamp"]):
                 upload_df["timestamp"] = pd.to_datetime(upload_df["timestamp"])
                 
-            # Preview data
-            st.dataframe(upload_df.head())
+            # Add a border around the preview
+            st.markdown(f"""
+            <div style="background-color:white; border:1px solid #cccccc; border-radius:2px; padding:10px; margin:10px 0;">
+                <h4 style="color:{TUDOR_BLUE}; margin-top:0;">Data Preview</h4>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.dataframe(upload_df.head(), use_container_width=True)
             
             upload_col1, upload_col2 = st.columns([3, 1])
             with upload_col2:
@@ -1316,9 +1408,5 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"Error processing file: {e}")
 
-# --- FOOTER ---
-st.markdown(f"""
-<div style="background-color:{TUDOR_BLUE}; padding:15px; border-radius:5px; margin-top:30px; text-align:center;">
-    <p style="color:white; margin:0;">Tudor Investments LLM Agent © 2025</p>
-</div>
-""", unsafe_allow_html=True)
+# Close upload container
+st.markdown("</div>", unsafe_allow_html=True)
