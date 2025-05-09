@@ -303,7 +303,6 @@ WHERE timestamp >= date('now', '-6 months');"""
             Please generate a SQL query to answer this question:
             """)
         ])
-        logging.info("sql_generation_prompt: ", sql_generation_prompt)
         
         # Generate SQL query using the custom prompt
         chain = sql_generation_prompt | langchain_llm | StrOutputParser()
@@ -425,13 +424,16 @@ def execute_sql_query(prompt, thinking_container):
     
     # Create a custom prompt template that includes the detailed schema
     sql_generation_prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content=(
-            "You are an expert SQL query generator for a financial analytics system. "
-            "Generate a precise, efficient SQL query to answer the user's question based on the database schema provided. "
-            "Be sure to use appropriate joins when querying across multiple tables. "
-            "Use aggregations, sorting, and filtering as needed to provide a comprehensive answer. "
-            "The query should be well-optimized and follow best practices. "
-            "Return ONLY the SQL query, with no additional explanation."
+            SystemMessage(content=(
+                "You are an expert SQL query generator for a financial analytics system. "
+                "Generate a precise, efficient SQL query to answer the user's question based on the database schema provided. "
+                "The query should be well-optimized and follow best practices. "
+                "All SQL queries must conform to SQLite3 syntax. Do not use MySQL, PostgreSQL, or other dialect-specific functions (e.g., DATE_SUB, INTERVAL, NOW()). Use SQLite functions such as date('now', '-5 months'), strftime(), and CURRENT_TIMESTAMP."
+                "Return ONLY the SQLLite3 query, with no additional explanation."
+                """E.G. -- Valid SQLite date manipulation
+SELECT * FROM stock_data
+WHERE timestamp >= date('now', '-6 months');"""
+"""DO NOT EVER ATTEMPT TO USE COLUMNS THAT YOU DO NOT SEE UNDER THE TABLE IN THE SCHEMA PROVIDED TO YOU. IT WILL NOT WORK."""
         )),
         ("human", """
         Database Schema:
