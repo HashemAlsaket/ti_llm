@@ -23,9 +23,6 @@ TUDOR_BG = "#F0F2F6"
 TUDOR_WHITE = "#FFFFFF"
 TUDOR_ACCENT = "#D4E0F0"
 
-# Logo in base64 for embedding in the app
-TUDOR_LOGO = "data:image/png;base64,..."  # Replace with actual base64 string if needed
-
 # Custom CSS for Tudor theme
 def tudor_theme():
     st.markdown(f"""
@@ -626,18 +623,36 @@ def generate_market_insights():
     
     conn.close()
     
+    # Check if we have data
+    if recent_stock_df.empty or prev_day_stock_df.empty:
+        return "Market data not available for insights.", "N/A", "N/A", 0.0
+    
     # Merge to calculate daily returns
     stock_df = recent_stock_df.merge(
         prev_day_stock_df,
         on='ticker',
         suffixes=('', '_prev')
     )
+    
+    # Check if we have merged data
+    if stock_df.empty:
+        return "Insufficient data for market insights.", "N/A", "N/A", 0.0
+    
     stock_df['daily_return'] = (stock_df['close'] - stock_df['close_prev']) / stock_df['close_prev'] * 100
     
     # Calculate market summary
-    top_performer = stock_df.loc[stock_df['daily_return'].idxmax()]
-    worst_performer = stock_df.loc[stock_df['daily_return'].idxmin()]
-    avg_return = stock_df['daily_return'].mean()
+    if len(stock_df) > 0:
+        top_performer_idx = stock_df['daily_return'].idxmax()
+        worst_performer_idx = stock_df['daily_return'].idxmin()
+        
+        if top_performer_idx is not None and worst_performer_idx is not None:
+            top_performer = stock_df.loc[top_performer_idx]
+            worst_performer = stock_df.loc[worst_performer_idx]
+            avg_return = stock_df['daily_return'].mean()
+        else:
+            return "Error calculating top performers.", "N/A", "N/A", 0.0
+    else:
+        return "No stock data available for insights.", "N/A", "N/A", 0.0
     
     # Calculate average sentiment
     avg_sentiment = news_df['sentiment'].mean() if not news_df.empty else 0
@@ -662,22 +677,44 @@ def generate_market_insights():
     else:
         sentiment_text = "negative"
     
-    date_str = recent_stock_df['timestamp'].iloc[0].strftime('%Y-%m-%d') if not recent_stock_df.empty else "today"
+    # Make sure we have a datetime object for timestamp
+    if isinstance(recent_stock_df['timestamp'].iloc[0], pd.Timestamp):
+        date_str = recent_stock_df['timestamp'].iloc[0].strftime('%Y-%m-%d')
+    elif isinstance(recent_stock_df['timestamp'].iloc[0], datetime):
+        date_str = recent_stock_df['timestamp'].iloc[0].strftime('%Y-%m-%d')
+    else:
+        date_str = "today"
     
     insight_text = f"Market Insight for {date_str}: The market is {market_state} with an average return of {avg_return:.2f}%. "
-    insight_text += f"The top performer is {top_performer['ticker']} (+{top_performer['daily_return']:.2f}%), "
-    insight_text += f"while {worst_performer['ticker']} is the worst performer ({worst_performer['daily_return']:.2f}%). "
+    
+    # Check that we have valid data for top and worst performers
+    if isinstance(top_performer, pd.Series) and 'ticker' in top_performer and 'daily_return' in top_performer:
+        insight_text += f"The top performer is {top_performer['ticker']} (+{top_performer['daily_return']:.2f}%), "
+        top_ticker = top_performer['ticker']
+    else:
+        insight_text += "Top performer data unavailable. "
+        top_ticker = "N/A"
+    
+    if isinstance(worst_performer, pd.Series) and 'ticker' in worst_performer and 'daily_return' in worst_performer:
+        insight_text += f"while {worst_performer['ticker']} is the worst performer ({worst_performer['daily_return']:.2f}%). "
+        bottom_ticker = worst_performer['ticker']
+    else:
+        insight_text += "Worst performer data unavailable. "
+        bottom_ticker = "N/A"
+    
     insight_text += f"News sentiment is generally {sentiment_text}."
     
-    return insight_text, top_performer['ticker'], worst_performer['ticker'], avg_return
+    return insight_text, top_ticker, bottom_ticker, avg_return
 
 # --- TUDOR LOGO DISPLAY FUNCTION ---
 def display_tudor_logo():
     st.markdown(f"""
     <div style="background-color:{TUDOR_BLUE}; padding:10px; border-radius:5px; margin-bottom:20px; 
         display:flex; align-items:center; justify-content:center;">
-        <img src="https://raw.githubusercontent.com/streamlit/streamlit/develop/examples/data/logo.png" 
-            style="width:40px; margin-right:10px;">
+        <div style="background-color:white; width:40px; height:40px; border-radius:50%; 
+            display:flex; align-items:center; justify-content:center; margin-right:10px;">
+            <span style="color:{TUDOR_BLUE}; font-size:24px; font-weight:bold;">T</span>
+        </div>
         <span style="color:white; font-size:24px; font-weight:bold;">TUDOR INVESTMENTS</span>
     </div>
     """, unsafe_allow_html=True)
