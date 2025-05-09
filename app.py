@@ -413,7 +413,7 @@ def execute_sql_query(prompt, thinking_container):
     sql_chain = create_sql_query_chain(
         langchain_llm,
         db,
-        k=3  # Number of examples used for few-shot prompting
+        # k=3  # Number of examples used for few-shot prompting
     )
     
     try:
