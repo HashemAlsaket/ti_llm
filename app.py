@@ -144,7 +144,7 @@ def load_data_to_db():
     np.random.seed(42)
     
     # Generate trades data
-    tickers = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA', 'XOM', 'CVX', 'BP', 'GOLD', 'NEM', 'RIO', 'VALE', 'USO', 'GLD', 'SLV']
+    tickers = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA', 'XOM', 'CVX', 'BP', 'GOLD', 'NEM', 'RIO', 'VALE', 'USO', 'SLV']
     model_groups = ['Macro Alpha', 'Q1 Equity', 'Commodities Signal', 'Rates Momentum', 'Tech Sector', 'Energy Focus', 'Mining Beta']
     sectors = ['Technology', 'Energy', 'Materials', 'Consumer Discretionary', 'Financial Services']
     
@@ -157,7 +157,7 @@ def load_data_to_db():
             sector = 'Technology'
         elif ticker in ['XOM', 'CVX', 'BP', 'USO']:
             sector = 'Energy'
-        elif ticker in ['GOLD', 'NEM', 'RIO', 'VALE', 'GLD', 'SLV']:
+        elif ticker in ['GOLD', 'NEM', 'RIO', 'VALE', 'SLV']:
             sector = 'Materials'
         else:
             sector = np.random.choice(sectors)
@@ -258,8 +258,6 @@ def load_data_to_db():
                 price = np.random.uniform(30, 70)
             elif ticker == 'USO':
                 price = np.random.uniform(60, 90)
-            elif ticker == 'GLD':
-                price = np.random.uniform(180, 210)
             elif ticker == 'SLV':
                 price = np.random.uniform(20, 30)
             
@@ -446,7 +444,7 @@ def execute_sql_query(prompt, thinking_container):
         <h4 style="color: #0A50A1;">📋 Database Schema</h4>
     </div>
     """, unsafe_allow_html=True)
-    thinking_container.code(DETAILED_SCHEMA, language="sql")
+    # thinking_container.code(DETAILED_SCHEMA, language="sql")
     
     # Create a custom prompt template that includes the detailed schema
     sql_generation_prompt = ChatPromptTemplate.from_messages([
