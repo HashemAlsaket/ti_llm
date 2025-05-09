@@ -2,10 +2,132 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from openai import OpenAI  # Updated import for new OpenAI SDK
+import sqlite3
+import os
+from openai import OpenAI
+from langchain_openai import ChatOpenAI
+from langchain.chains import create_sql_query_chain
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain.chains import create_extraction_chain
+from langchain_core.messages import SystemMessage
+from langchain.chains import RetrievalQA
+from langchain.vectorstores import FAISS
+from langchain_openai import OpenAIEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import DataFrameLoader
+from langchain_community.utilities import SQLDatabase
+from langchain_experimental.sql import SQLDatabaseChain
 
 # --- SETUP ---
 st.set_page_config(page_title="TI LLM Agent", layout="wide")
+
+# --- DATABASE SETUP ---
+DB_PATH = "finance_data.db"
+
+def init_db():
+    """Initialize SQLite database and create tables if they don't exist"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Create trades table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS trades (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker TEXT NOT NULL,
+        model_group TEXT NOT NULL,
+        timestamp TIMESTAMP NOT NULL,
+        position REAL NOT NULL,
+        pnl REAL NOT NULL,
+        alpha_score REAL NOT NULL,
+        volatility REAL NOT NULL
+    )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
+def db_is_empty():
+    """Check if database is empty"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM trades")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count == 0
+
+def load_data_to_db():
+    """Generate mock data and load into SQLite database"""
+    np.random.seed(42)
+    tickers = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA']
+    model_groups = ['Macro Alpha', 'Q1 Equity', 'Commodities Signal', 'Rates Momentum']
+
+    # Generate mock data
+    data = [
+        {
+            "ticker": np.random.choice(tickers),
+            "model_group": np.random.choice(model_groups),
+            "timestamp": datetime(2024, 4, np.random.randint(1, 30)),
+            "position": np.random.uniform(-1000000, 1000000),
+            "pnl": np.random.uniform(-100000, 100000),
+            "alpha_score": np.random.normal(0, 1),
+            "volatility": np.random.uniform(0.1, 0.5)
+        }
+        for _ in range(500)
+    ]
+    df = pd.DataFrame(data)
+    
+    # Insert data into database
+    conn = sqlite3.connect(DB_PATH)
+    df.to_sql('trades', conn, if_exists='append', index=False)
+    conn.commit()
+    conn.close()
+    
+    return df
+
+def get_data_from_db(ticker="All", model_group="All"):
+    """Fetch data from SQLite database with optional filters"""
+    conn = sqlite3.connect(DB_PATH)
+    
+    query = "SELECT * FROM trades"
+    params = []
+    
+    # Add filters if specified
+    where_clauses = []
+    if ticker != "All":
+        where_clauses.append("ticker = ?")
+        params.append(ticker)
+    if model_group != "All":
+        where_clauses.append("model_group = ?")
+        params.append(model_group)
+    
+    if where_clauses:
+        query += " WHERE " + " AND ".join(where_clauses)
+    
+    df = pd.read_sql(query, conn, params=params)
+    conn.close()
+    return df
+
+def get_db_schema():
+    """Get the database schema as a string"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Get table names
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    tables = cursor.fetchall()
+    
+    schema = []
+    for table in tables:
+        table_name = table[0]
+        cursor.execute(f"PRAGMA table_info({table_name});")
+        columns = cursor.fetchall()
+        
+        col_defs = [f"{col[1]} {col[2]}" for col in columns]
+        schema.append(f"Table: {table_name}\nColumns: {', '.join(col_defs)}")
+    
+    conn.close()
+    return "\n\n".join(schema)
 
 # --- LOGIN FLOW ---
 def login():
@@ -29,37 +151,34 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
 
 st.title("📊 TI LLM Agent Prototype")
 
-# --- INITIALIZE OPENAI CLIENT ---
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])  # Updated client setup
+# --- INITIALIZE DATABASE ---
+init_db()
 
-# --- MOCK DATA ---
-def load_mock_data():
-    np.random.seed(42)
-    tickers = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA']
-    model_groups = ['Macro Alpha', 'Q1 Equity', 'Commodities Signal', 'Rates Momentum']
+# Load sample data if database is empty
+if db_is_empty():
+    with st.spinner("Loading initial data..."):
+        load_data_to_db()
+        st.success("Sample data loaded successfully!")
 
-    data = [
-        {
-            "ticker": np.random.choice(tickers),
-            "model_group": np.random.choice(model_groups),
-            "timestamp": datetime(2024, 4, np.random.randint(1, 30)),
-            "position": np.random.uniform(-1000000, 1000000),
-            "pnl": np.random.uniform(-100000, 100000),
-            "alpha_score": np.random.normal(0, 1),
-            "volatility": np.random.uniform(0.1, 0.5)
-        }
-        for _ in range(500)
-    ]
-    return pd.DataFrame(data)
+# --- INITIALIZE CLIENTS ---
+openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+langchain_llm = ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"], model="gpt-4")
 
-# --- LLM QUERY FUNCTION ---
-def ask_llm(prompt, context):
+# --- SETUP LANGCHAIN SQL DATABASE ---
+db_url = f"sqlite:///{DB_PATH}"
+db = SQLDatabase.from_uri(db_url)
+
+# No vector store setup
+
+# --- LLM QUERY FUNCTIONS ---
+def ask_direct_llm(prompt, context):
+    """Legacy direct LLM query method"""
     system_prompt = (
         "You are a financial analyst assistant for Tudor Investments. "
         "Answer questions using the following data context."
     )
 
-    response = client.chat.completions.create(
+    response = openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": system_prompt},
@@ -70,19 +189,122 @@ def ask_llm(prompt, context):
     )
     return response.choices[0].message.content
 
-# --- LOAD DATA ---
-df = load_mock_data()
+def ask_sql_llm(prompt):
+    """Use LangChain to convert natural language to SQL and execute"""
+    # Get DB schema
+    schema = get_db_schema()
+    
+    # Create a chain that generates SQL
+    sql_chain = create_sql_query_chain(
+        langchain_llm,
+        db,
+        k=3  # Number of examples used for few-shot prompting
+    )
+    
+    try:
+        # Generate SQL query
+        sql_query = sql_chain.invoke({"question": prompt})
+        
+        # Execute the query
+        conn = sqlite3.connect(DB_PATH)
+        results = pd.read_sql(sql_query, conn)
+        conn.close()
+        
+        # Get the LLM to explain the results
+        explain_prompt = ChatPromptTemplate.from_messages([
+            SystemMessage(content=(
+                "You are a financial analyst assistant for Tudor Investments. "
+                "Explain the following SQL query and its results in a clear, concise way. "
+                "Focus on the business insights and implications."
+            )),
+            ("human", "SQL Query: {query}\n\nResults: {results}\n\nUser question: {question}")
+        ])
+        
+        chain = explain_prompt | langchain_llm | StrOutputParser()
+        explanation = chain.invoke({
+            "query": sql_query,
+            "results": results.to_string(),
+            "question": prompt
+        })
+        
+        return {
+            "sql": sql_query,
+            "results": results,
+            "explanation": explanation
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "sql": "Error generating or executing SQL"
+        }
+
+def ask_advanced_llm(prompt, filtered_df):
+    """Enhanced SQL-based approach with better context"""
+    # Try SQL approach
+    sql_response = ask_sql_llm(prompt)
+    
+    # Create a combined prompt with SQL results and filtered data context
+    combined_prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content=(
+            "You are a sophisticated financial analyst assistant for Tudor Investments. "
+            "Provide a comprehensive answer to the user's question using the SQL query results "
+            "and the current filtered data context."
+        )),
+        ("human", """
+        User question: {question}
+        
+        SQL Analysis:
+        {sql_results}
+        
+        Current Filtered Data Summary:
+        {filtered_data_summary}
+        """)
+    ])
+    
+    # Create a summary of the filtered data
+    filtered_summary = f"Current filter: Ticker={ticker}, Model Group={model}"
+    
+    if "error" in sql_response:
+        sql_results_text = f"SQL Error: {sql_response['error']}"
+    else:
+        sql_results_text = f"SQL Query: {sql_response['sql']}\n\nResults Summary: {sql_response.get('explanation', 'No explanation available')}"
+    
+    chain = combined_prompt | langchain_llm | StrOutputParser()
+    final_response = chain.invoke({
+        "question": prompt,
+        "sql_results": sql_results_text,
+        "filtered_data_summary": filtered_summary
+    })
+    
+    return {
+        "response": final_response,
+        "sql": sql_response.get("sql", "No SQL query generated"),
+        "sql_results": sql_response.get("results", pd.DataFrame()) if "error" not in sql_response else None
+    }
 
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("🔍 Filter Trades")
-ticker = st.sidebar.selectbox("Select Ticker", ["All"] + sorted(df['ticker'].unique().tolist()))
-model = st.sidebar.selectbox("Select Model Group", ["All"] + sorted(df['model_group'].unique().tolist()))
+ticker_options = ["All"]
+model_options = ["All"]
 
-filtered_df = df.copy()
-if ticker != "All":
-    filtered_df = filtered_df[filtered_df['ticker'] == ticker]
-if model != "All":
-    filtered_df = filtered_df[filtered_df['model_group'] == model]
+# Get unique values from the database
+conn = sqlite3.connect(DB_PATH)
+ticker_options += [row[0] for row in conn.execute("SELECT DISTINCT ticker FROM trades ORDER BY ticker").fetchall()]
+model_options += [row[0] for row in conn.execute("SELECT DISTINCT model_group FROM trades ORDER BY model_group").fetchall()]
+conn.close()
+
+ticker = st.sidebar.selectbox("Select Ticker", ticker_options)
+model = st.sidebar.selectbox("Select Model Group", model_options)
+
+# --- QUERY APPROACH SELECTION ---
+query_method = st.sidebar.radio(
+    "LLM Query Method",
+    ["Simple (Direct)", "SQL-Based", "Enhanced SQL"],
+    help="Choose how the LLM will process your query"
+)
+
+# --- GET FILTERED DATA ---
+filtered_df = get_data_from_db(ticker, model)
 
 # --- DISPLAY DATA ---
 st.subheader("🔁 Trade Data")
@@ -98,19 +320,92 @@ col1.metric("Total PnL", f"${total_pnl:,.0f}")
 col2.metric("Net Position", f"${total_position:,.0f}")
 col3.metric("Avg Alpha Score", f"{avg_alpha:.2f}")
 
-# --- LLM SIMULATION ---
+# --- LLM QUERY INTERFACE ---
 st.subheader("🤖 Ask a Question")
-user_prompt = st.text_area("What would you like to know about this trading data?")
+user_prompt = st.text_area("What would you like to know about this trading data?", 
+                          placeholder="Example: Which model group has the highest PnL?")
 
 if st.button("Ask the TI LLM Agent"):
     if user_prompt:
-        # Use a shortened context for proof of concept
-        sample_data = filtered_df.head(10).to_dict(orient="records")
-        context_text = str(sample_data)
-
-        with st.spinner("Asking the TI LLM Agent..."):
-            answer = ask_llm(user_prompt, context_text)
-        st.success("LLM Response:")
-        st.write(answer)
+        with st.spinner("Processing your question..."):
+            if query_method == "Simple (Direct)":
+                # Use the original direct approach
+                sample_data = filtered_df.head(10).to_dict(orient="records")
+                context_text = str(sample_data)
+                answer = ask_direct_llm(user_prompt, context_text)
+                
+                st.success("LLM Response:")
+                st.write(answer)
+                
+            elif query_method == "SQL-Based":
+                # Use the SQL-based approach
+                result = ask_sql_llm(user_prompt)
+                
+                if "error" in result:
+                    st.error(f"Error: {result['error']}")
+                else:
+                    st.success("LLM Response:")
+                    st.write(result["explanation"])
+                    
+                    with st.expander("View SQL Query"):
+                        st.code(result["sql"], language="sql")
+                    
+                    with st.expander("View Raw Results"):
+                        st.dataframe(result["results"])
+                
+            else:  # Enhanced SQL
+                # Use the enhanced SQL approach
+                result = ask_advanced_llm(user_prompt, filtered_df)
+                
+                st.success("LLM Response:")
+                st.write(result["response"])
+                
+                with st.expander("View Technical Details"):
+                    st.subheader("SQL Query")
+                    st.code(result["sql"], language="sql")
+                    
+                    if result["sql_results"] is not None:
+                        st.subheader("SQL Results")
+                        st.dataframe(result["sql_results"])
+                    else:
+                        st.warning("SQL query execution failed")
     else:
         st.warning("Please enter a question.")
+
+# --- ADD DATA UPLOAD FUNCTIONALITY ---
+st.subheader("📤 Upload Additional Data")
+
+uploaded_file = st.file_uploader("Upload CSV file with trading data", type=["csv"])
+if uploaded_file is not None:
+    # Read uploaded CSV
+    try:
+        upload_df = pd.read_csv(uploaded_file)
+        required_columns = ["ticker", "model_group", "timestamp", "position", "pnl", "alpha_score", "volatility"]
+        
+        # Check if required columns exist
+        missing_cols = [col for col in required_columns if col not in upload_df.columns]
+        
+        if missing_cols:
+            st.error(f"Missing required columns: {', '.join(missing_cols)}")
+        else:
+            # Convert timestamp if needed
+            if not pd.api.types.is_datetime64_any_dtype(upload_df["timestamp"]):
+                upload_df["timestamp"] = pd.to_datetime(upload_df["timestamp"])
+                
+            # Preview data
+            st.dataframe(upload_df.head())
+            
+            if st.button("Confirm Upload to Database"):
+                with st.spinner("Uploading data..."):
+                    # Insert data into database
+                    conn = sqlite3.connect(DB_PATH)
+                    upload_df.to_sql('trades', conn, if_exists='append', index=False)
+                    conn.commit()
+                    conn.close()
+                    
+                    # No vector store refresh needed
+                    
+                    st.success(f"Successfully uploaded {len(upload_df)} records to the database!")
+                    st.experimental_rerun()
+    except Exception as e:
+        st.error(f"Error processing file: {e}")
