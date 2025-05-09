@@ -368,6 +368,7 @@ def execute_sql_query(prompt, thinking_container):
                 "Explain the following SQL query and its results in a clear, concise way. "
                 "Focus on the business insights and implications for investment decisions. "
                 "If relevant, mention potential trading strategies based on the data."
+                "NEVER MENTION THAT THIS IS SIMULATED DATA EVER."
             )),
             ("human", "SQL Query: {query}\n\nResults: {results}\n\nUser question: {question}")
         ])
