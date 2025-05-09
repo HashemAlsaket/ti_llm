@@ -312,11 +312,33 @@ def get_data_from_db(ticker="All", model_group="All"):
                 "Generate a precise, efficient SQL query to answer the user's question based on the database schema provided. "
                 "The query should be well-optimized and follow best practices. "
                 "All SQL queries must conform to SQLite3 syntax. Do not use MySQL, PostgreSQL, or other dialect-specific functions (e.g., DATE_SUB, INTERVAL, NOW()). Use SQLite functions such as date('now', '-5 months'), strftime(), and CURRENT_TIMESTAMP."
-                "Return ONLY the SQLLite3 query, with no additional explanation."
+                "Return ONLY the query, with no additional explanation."
                 """E.G. -- Valid SQLite date manipulation
-SELECT * FROM stock_data
-WHERE timestamp >= date('now', '-6 months');"""
+SELECT 
+    T.trade_date, 
+    T.action, 
+    T.quantity, 
+    T.price AS trade_price,
+    S.open AS simulated_open_price, 
+    S.high AS simulated_high_price, 
+    S.low AS simulated_low_price, 
+    S.close AS simulated_close_price,
+    R.open AS real_open_price,
+    R.high AS real_high_price,
+    R.low AS real_low_price,
+    R.close AS real_close_price
+FROM 
+    historical_trades T 
+JOIN
+    simulated_stock_data S ON T.ticker = S.ticker AND T.trade_date = S.timestamp
+JOIN
+    real_stock_data R ON T.ticker = R.ticker AND T.trade_date = R.timestamp
+WHERE 
+    T.ticker = 'MSFT'
+ORDER BY 
+    T.trade_date;"""
 """DO NOT EVER ATTEMPT TO USE COLUMNS THAT YOU DO NOT SEE UNDER THE TABLE IN THE SCHEMA PROVIDED TO YOU. IT WILL NOT WORK."""
+"""RETURN ONLY THE QUERY"""
             )),
             ("human", """
             Database Schema:
@@ -455,9 +477,31 @@ def execute_sql_query(prompt, thinking_container):
                 "All SQL queries must conform to SQLite3 syntax. Do not use MySQL, PostgreSQL, or other dialect-specific functions (e.g., DATE_SUB, INTERVAL, NOW()). Use SQLite functions such as date('now', '-5 months'), strftime(), and CURRENT_TIMESTAMP."
                 "Return ONLY the SQLLite3 query, with no additional explanation."
                 """E.G. -- Valid SQLite date manipulation
-SELECT * FROM stock_data
-WHERE timestamp >= date('now', '-6 months');"""
+SELECT 
+    T.trade_date, 
+    T.action, 
+    T.quantity, 
+    T.price AS trade_price,
+    S.open AS simulated_open_price, 
+    S.high AS simulated_high_price, 
+    S.low AS simulated_low_price, 
+    S.close AS simulated_close_price,
+    R.open AS real_open_price,
+    R.high AS real_high_price,
+    R.low AS real_low_price,
+    R.close AS real_close_price
+FROM 
+    historical_trades T 
+JOIN
+    simulated_stock_data S ON T.ticker = S.ticker AND T.trade_date = S.timestamp
+JOIN
+    real_stock_data R ON T.ticker = R.ticker AND T.trade_date = R.timestamp
+WHERE 
+    T.ticker = 'MSFT'
+ORDER BY 
+    T.trade_date;"""
 """DO NOT EVER ATTEMPT TO USE COLUMNS THAT YOU DO NOT SEE UNDER THE TABLE IN THE SCHEMA PROVIDED TO YOU. IT WILL NOT WORK."""
+"""RETURN ONLY THE QUERY"""
         )),
         ("human", """
         Database Schema:
