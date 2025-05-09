@@ -4,7 +4,6 @@ import numpy as np
 from datetime import datetime
 import sqlite3
 import os
-import time
 from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain.chains import create_sql_query_chain
@@ -34,36 +33,7 @@ def init_db():
         position REAL NOT NULL,
         pnl REAL NOT NULL,
         alpha_score REAL NOT NULL,
-        volatility REAL NOT NULL,
-        sector TEXT,
-        commodity_exposure REAL,
-        interest_rate_sensitivity REAL
-    )
-    ''')
-    
-    # Create economic_indicators table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS economic_indicators (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        indicator_name TEXT NOT NULL,
-        timestamp TIMESTAMP NOT NULL,
-        value REAL NOT NULL,
-        region TEXT NOT NULL,
-        previous_value REAL
-    )
-    ''')
-    
-    # Create historical_trades table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS historical_trades (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ticker TEXT NOT NULL,
-        trade_date TIMESTAMP NOT NULL,
-        action TEXT NOT NULL,
-        quantity INTEGER NOT NULL,
-        price REAL NOT NULL,
-        model_group TEXT,
-        trade_id TEXT
+        volatility REAL NOT NULL
     )
     ''')
     
@@ -74,173 +44,39 @@ def db_is_empty():
     """Check if database is empty"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
-    # Check trades table
     cursor.execute("SELECT COUNT(*) FROM trades")
-    trades_count = cursor.fetchone()[0]
-    
-    # Check economic_indicators table
-    cursor.execute("SELECT COUNT(*) FROM economic_indicators")
-    indicators_count = cursor.fetchone()[0]
-    
-    # Check historical_trades table
-    cursor.execute("SELECT COUNT(*) FROM historical_trades")
-    historical_trades_count = cursor.fetchone()[0]
-    
+    count = cursor.fetchone()[0]
     conn.close()
-    return trades_count == 0 and indicators_count == 0 and historical_trades_count == 0
+    return count == 0
 
 def load_data_to_db():
     """Generate mock data and load into SQLite database"""
-    # Set random seed for reproducibility
     np.random.seed(42)
-    
-    # Generate trades data
-    tickers = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA', 'XOM', 'CVX', 'BP', 'GOLD', 'NEM', 'RIO', 'VALE', 'USO', 'GLD', 'SLV']
-    model_groups = ['Macro Alpha', 'Q1 Equity', 'Commodities Signal', 'Rates Momentum', 'Tech Sector', 'Energy Focus', 'Mining Beta']
-    sectors = ['Technology', 'Energy', 'Materials', 'Consumer Discretionary', 'Financial Services']
-    
-    trades_data = []
-    for _ in range(500):
-        ticker = np.random.choice(tickers)
-        
-        # Assign sectors based on ticker
-        if ticker in ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA']:
-            sector = 'Technology'
-        elif ticker in ['XOM', 'CVX', 'BP', 'USO']:
-            sector = 'Energy'
-        elif ticker in ['GOLD', 'NEM', 'RIO', 'VALE', 'GLD', 'SLV']:
-            sector = 'Materials'
-        else:
-            sector = np.random.choice(sectors)
-        
-        # Determine commodity exposure based on sector
-        if sector == 'Energy':
-            commodity_exposure = np.random.uniform(0.6, 0.9)
-        elif sector == 'Materials':
-            commodity_exposure = np.random.uniform(0.5, 0.8)
-        else:
-            commodity_exposure = np.random.uniform(0, 0.3)
-        
-        # Determine interest rate sensitivity
-        if sector == 'Financial Services':
-            interest_rate_sensitivity = np.random.uniform(0.7, 0.95)
-        elif sector == 'Technology':
-            interest_rate_sensitivity = np.random.uniform(0.4, 0.7)
-        else:
-            interest_rate_sensitivity = np.random.uniform(0.1, 0.5)
-        
-        trades_data.append({
-            "ticker": ticker,
+    tickers = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA']
+    model_groups = ['Macro Alpha', 'Q1 Equity', 'Commodities Signal', 'Rates Momentum']
+
+    # Generate mock data
+    data = [
+        {
+            "ticker": np.random.choice(tickers),
             "model_group": np.random.choice(model_groups),
-            "timestamp": datetime(2024, np.random.randint(1, 5), np.random.randint(1, 29)),
-            "position": np.random.uniform(-2000000, 2000000),
-            "pnl": np.random.uniform(-150000, 200000),
+            "timestamp": datetime(2024, 4, np.random.randint(1, 30)),
+            "position": np.random.uniform(-1000000, 1000000),
+            "pnl": np.random.uniform(-100000, 100000),
             "alpha_score": np.random.normal(0, 1),
-            "volatility": np.random.uniform(0.1, 0.5),
-            "sector": sector,
-            "commodity_exposure": commodity_exposure,
-            "interest_rate_sensitivity": interest_rate_sensitivity
-        })
-    
-    # Generate economic indicators data
-    indicators = ['GDP Growth', 'Inflation Rate', 'Unemployment', 'Interest Rate', 'Oil Price', 'Gold Price', 'Consumer Confidence']
-    regions = ['US', 'EU', 'Asia', 'Global']
-    
-    economic_data = []
-    for indicator in indicators:
-        for region in regions:
-            # Create time series of monthly values
-            for month in range(1, 5):
-                base_value = 0
-                
-                # Set base values for different indicators
-                if indicator == 'GDP Growth':
-                    base_value = np.random.uniform(2.0, 3.5)
-                elif indicator == 'Inflation Rate':
-                    base_value = np.random.uniform(2.5, 4.0)
-                elif indicator == 'Unemployment':
-                    base_value = np.random.uniform(3.5, 7.0)
-                elif indicator == 'Interest Rate':
-                    base_value = np.random.uniform(3.0, 5.0)
-                elif indicator == 'Oil Price':
-                    base_value = np.random.uniform(70, 90)
-                elif indicator == 'Gold Price':
-                    base_value = np.random.uniform(1800, 2100)
-                elif indicator == 'Consumer Confidence':
-                    base_value = np.random.uniform(95, 110)
-                
-                # Add some random variation
-                current_value = base_value + np.random.uniform(-0.5, 0.5)
-                
-                # Previous value (slightly different)
-                previous_value = current_value + np.random.uniform(-0.3, 0.3)
-                
-                economic_data.append({
-                    "indicator_name": indicator,
-                    "timestamp": datetime(2024, month, 15),
-                    "value": current_value,
-                    "region": region,
-                    "previous_value": previous_value
-                })
-    
-    # Generate historical trades data
-    historical_trades = []
-    actions = ['BUY', 'SELL']
-    
-    for ticker in tickers:
-        for _ in range(20):  # 20 trades per ticker
-            trade_date = datetime(2024, np.random.randint(1, 5), np.random.randint(1, 29))
-            price = 0
-            
-            # Set price ranges based on ticker
-            if ticker == 'AAPL':
-                price = np.random.uniform(160, 200)
-            elif ticker == 'MSFT':
-                price = np.random.uniform(320, 420)
-            elif ticker == 'GOOG':
-                price = np.random.uniform(130, 180)
-            elif ticker == 'AMZN':
-                price = np.random.uniform(150, 190)
-            elif ticker == 'NVDA':
-                price = np.random.uniform(700, 950)
-            elif ticker in ['XOM', 'CVX', 'BP']:
-                price = np.random.uniform(80, 120)
-            elif ticker in ['GOLD', 'NEM', 'RIO', 'VALE']:
-                price = np.random.uniform(30, 70)
-            elif ticker == 'USO':
-                price = np.random.uniform(60, 90)
-            elif ticker == 'GLD':
-                price = np.random.uniform(180, 210)
-            elif ticker == 'SLV':
-                price = np.random.uniform(20, 30)
-            
-            historical_trades.append({
-                "ticker": ticker,
-                "trade_date": trade_date,
-                "action": np.random.choice(actions),
-                "quantity": np.random.randint(100, 10000),
-                "price": price,
-                "model_group": np.random.choice(model_groups),
-                "trade_id": f"TRD-{np.random.randint(10000, 99999)}"
-            })
+            "volatility": np.random.uniform(0.1, 0.5)
+        }
+        for _ in range(500)
+    ]
+    df = pd.DataFrame(data)
     
     # Insert data into database
     conn = sqlite3.connect(DB_PATH)
-    
-    trades_df = pd.DataFrame(trades_data)
-    trades_df.to_sql('trades', conn, if_exists='append', index=False)
-    
-    economic_df = pd.DataFrame(economic_data)
-    economic_df.to_sql('economic_indicators', conn, if_exists='append', index=False)
-    
-    historical_df = pd.DataFrame(historical_trades)
-    historical_df.to_sql('historical_trades', conn, if_exists='append', index=False)
-    
+    df.to_sql('trades', conn, if_exists='append', index=False)
     conn.commit()
     conn.close()
     
-    return trades_df
+    return df
 
 def get_data_from_db(ticker="All", model_group="All"):
     """Fetch data from SQLite database with optional filters"""
@@ -325,23 +161,13 @@ langchain_llm = ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"], model="gpt-4")
 db_url = f"sqlite:///{DB_PATH}"
 db = SQLDatabase.from_uri(db_url)
 
-# --- LLM QUERY FUNCTIONS WITH THINKING LOG ---
-def ask_direct_llm(prompt, context, thinking_container):
-    """Legacy direct LLM query method with thinking log"""
-    thinking_container.write("🧠 **Agent Thinking:** Preparing to analyze data directly...")
-    time.sleep(0.5)
-    
-    thinking_container.write("📊 **Data Sample:**")
-    thinking_container.json(context[:500] + "..." if len(context) > 500 else context)
-    time.sleep(1)
-    
+# --- LLM QUERY FUNCTIONS ---
+def ask_direct_llm(prompt, context):
+    """Legacy direct LLM query method"""
     system_prompt = (
         "You are a financial analyst assistant for Tudor Investments. "
         "Answer questions using the following data context."
     )
-    
-    thinking_container.write("🤔 **Processing Query:** Analyzing data to find patterns and insights...")
-    time.sleep(1)
 
     response = openai_client.chat.completions.create(
         model="gpt-4",
@@ -352,21 +178,12 @@ def ask_direct_llm(prompt, context, thinking_container):
         temperature=0.2,
         max_tokens=500
     )
-    
-    thinking_container.write("✅ **Completed Analysis:** Ready to provide insights")
     return response.choices[0].message.content
 
-def ask_sql_llm(prompt, thinking_container):
-    """Use LangChain to convert natural language to SQL and execute, with thinking log"""
+def ask_sql_llm(prompt):
+    """Use LangChain to convert natural language to SQL and execute"""
     # Get DB schema
     schema = get_db_schema()
-    
-    thinking_container.write("🧠 **Agent Thinking:** Converting your question to SQL...")
-    time.sleep(0.5)
-    
-    thinking_container.write("📋 **Database Schema:**")
-    thinking_container.code(schema, language="sql")
-    time.sleep(1)
     
     # Create a chain that generates SQL
     sql_chain = create_sql_query_chain(
@@ -377,26 +194,14 @@ def ask_sql_llm(prompt, thinking_container):
     
     try:
         # Generate SQL query
-        thinking_container.write("🔍 **Generating SQL Query...**")
         sql_query = sql_chain.invoke({"question": prompt})
         
-        thinking_container.write("📝 **Generated SQL:**")
-        thinking_container.code(sql_query, language="sql")
-        time.sleep(1)
-        
         # Execute the query
-        thinking_container.write("⚙️ **Executing SQL Query...**")
         conn = sqlite3.connect(DB_PATH)
         results = pd.read_sql(sql_query, conn)
         conn.close()
         
-        thinking_container.write("📊 **Query Results:**")
-        thinking_container.dataframe(results.head(5) if len(results) > 5 else results)
-        time.sleep(1)
-        
         # Get the LLM to explain the results
-        thinking_container.write("🧩 **Interpreting Results...**")
-        
         explain_prompt = ChatPromptTemplate.from_messages([
             SystemMessage(content=(
                 "You are a financial analyst assistant for Tudor Investments. "
@@ -413,33 +218,23 @@ def ask_sql_llm(prompt, thinking_container):
             "question": prompt
         })
         
-        thinking_container.write("✅ **Analysis Complete:** Preparing final response")
-        
         return {
             "sql": sql_query,
             "results": results,
             "explanation": explanation
         }
     except Exception as e:
-        thinking_container.error(f"❌ **Error:** {str(e)}")
         return {
             "error": str(e),
             "sql": "Error generating or executing SQL"
         }
 
-def ask_enhanced_sql_llm(prompt, filtered_df, thinking_container):
-    """Enhanced SQL-based approach with better context and thinking log"""
-    thinking_container.write("🧠 **Agent Thinking:** Starting enhanced analysis...")
-    time.sleep(0.5)
-    
+def ask_enhanced_sql_llm(prompt, filtered_df):
+    """Enhanced SQL-based approach with better context"""
     # Try SQL approach
-    thinking_container.write("⚡ **Phase 1:** Performing SQL query analysis")
-    sql_response = ask_sql_llm(prompt, thinking_container)
+    sql_response = ask_sql_llm(prompt)
     
     # Create a combined prompt with SQL results and filtered data context
-    thinking_container.write("⚡ **Phase 2:** Enhancing with filtered data context")
-    time.sleep(0.5)
-    
     combined_prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content=(
             "You are a sophisticated financial analyst assistant for Tudor Investments. "
@@ -459,16 +254,11 @@ def ask_enhanced_sql_llm(prompt, filtered_df, thinking_container):
     
     # Create a summary of the filtered data
     filtered_summary = f"Current filter: Ticker={ticker}, Model Group={model}"
-    thinking_container.write(f"📌 **Current Context:** {filtered_summary}")
-    time.sleep(0.5)
     
     if "error" in sql_response:
         sql_results_text = f"SQL Error: {sql_response['error']}"
-        thinking_container.error(f"❌ **SQL Error:** {sql_response['error']}")
     else:
         sql_results_text = f"SQL Query: {sql_response['sql']}\n\nResults Summary: {sql_response.get('explanation', 'No explanation available')}"
-    
-    thinking_container.write("🔄 **Synthesizing Complete Answer...**")
     
     chain = combined_prompt | langchain_llm | StrOutputParser()
     final_response = chain.invoke({
@@ -476,8 +266,6 @@ def ask_enhanced_sql_llm(prompt, filtered_df, thinking_container):
         "sql_results": sql_results_text,
         "filtered_data_summary": filtered_summary
     })
-    
-    thinking_container.write("✅ **Enhanced Analysis Complete:** Final response ready")
     
     return {
         "response": final_response,
@@ -523,63 +311,26 @@ col1.metric("Total PnL", f"${total_pnl:,.0f}")
 col2.metric("Net Position", f"${total_position:,.0f}")
 col3.metric("Avg Alpha Score", f"{avg_alpha:.2f}")
 
-# --- TEST PROMPTS ---
-test_prompts = [
-    "Which model group has the highest total PnL?",
-    "What is the relationship between alpha score and volatility?",
-    "Show me the performance of technology stocks compared to energy stocks",
-    "Which ticker has the most negative position?",
-    "What's the average PnL for trades in the Materials sector?",
-    "How does commodity exposure correlate with PnL across different sectors?",
-    "What was the trend of oil prices in the first quarter of 2024?",
-    "Which region had the highest interest rates in March 2024?",
-    "What is the distribution of trade sizes for NVDA?",
-    "How have gold prices changed month-over-month in 2024?",
-    "Compare the performance of the Macro Alpha and Tech Sector model groups",
-    "What's the total position value by sector?",
-    "Which model has the most consistent alpha score?",
-    "Is there a correlation between interest rates and financial sector performance?",
-    "What was the average buy price for Apple stock in Q1 2024?",
-    "How does consumer confidence relate to position sizes in Consumer Discretionary stocks?",
-    "Which commodity-related tickers have the highest volatility?",
-    "What is the trend in inflation rates across different regions?",
-    "Show me the relationship between GDP growth and stock performance by sector",
-    "What was the largest single trade by value in the historical trades data?"
-]
-
 # --- LLM QUERY INTERFACE ---
 st.subheader("🤖 Ask a Question")
-
-# Add dropdown for test prompts
-use_test_prompt = st.checkbox("Use a test prompt", value=False)
-if use_test_prompt:
-    selected_prompt = st.selectbox("Select a test prompt", test_prompts)
-    user_prompt = selected_prompt
-else:
-    user_prompt = st.text_area("What would you like to know about this trading data?", 
-                            placeholder="Example: Which model group has the highest PnL?")
-
-# Create a placeholder for the agent thinking log
-thinking_log = st.empty()
+user_prompt = st.text_area("What would you like to know about this trading data?", 
+                          placeholder="Example: Which model group has the highest PnL?")
 
 if st.button("Ask the TI LLM Agent"):
     if user_prompt:
-        # Clear previous thinking log
-        thinking_container = st.expander("💡 Agent Thinking Process", expanded=True)
-        
         with st.spinner("Processing your question..."):
             if query_method == "Simple (Direct)":
                 # Use the original direct approach
                 sample_data = filtered_df.head(10).to_dict(orient="records")
                 context_text = str(sample_data)
-                answer = ask_direct_llm(user_prompt, context_text, thinking_container)
+                answer = ask_direct_llm(user_prompt, context_text)
                 
                 st.success("LLM Response:")
                 st.write(answer)
                 
             elif query_method == "SQL-Based":
                 # Use the SQL-based approach
-                result = ask_sql_llm(user_prompt, thinking_container)
+                result = ask_sql_llm(user_prompt)
                 
                 if "error" in result:
                     st.error(f"Error: {result['error']}")
@@ -595,7 +346,7 @@ if st.button("Ask the TI LLM Agent"):
                 
             else:  # Enhanced SQL
                 # Use the enhanced SQL approach
-                result = ask_enhanced_sql_llm(user_prompt, filtered_df, thinking_container)
+                result = ask_enhanced_sql_llm(user_prompt, filtered_df)
                 
                 st.success("LLM Response:")
                 st.write(result["response"])
