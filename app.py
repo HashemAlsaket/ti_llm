@@ -11,6 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import SystemMessage
 from langchain_community.utilities import SQLDatabase
+import logging
 
 # Define the detailed schema as a constant at the top level for reuse
 DETAILED_SCHEMA = """
@@ -302,7 +303,7 @@ WHERE timestamp >= date('now', '-6 months');"""
             Please generate a SQL query to answer this question:
             """)
         ])
-        print("sql_generation_prompt: ", sql_generation_prompt)
+        logging.info("sql_generation_prompt: ", sql_generation_prompt)
         
         # Generate SQL query using the custom prompt
         chain = sql_generation_prompt | langchain_llm | StrOutputParser()
