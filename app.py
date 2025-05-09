@@ -191,7 +191,7 @@ def load_data_to_db():
         trades_data.append({
             "ticker": ticker,
             "model_group": np.random.choice(model_groups),
-            "timestamp": datetime(2024, np.random.randint(1, 5), np.random.randint(1, 29)),
+            "timestamp": datetime(2025, np.random.randint(1, 5), np.random.randint(1, 29)),
             "position": np.random.uniform(-2000000, 2000000),
             "pnl": np.random.uniform(-150000, 200000),
             "alpha_score": np.random.normal(0, 1),
@@ -236,7 +236,7 @@ def load_data_to_db():
                 
                 economic_data.append({
                     "indicator_name": indicator,
-                    "timestamp": datetime(2024, month, 15),
+                    "timestamp": datetime(2025, month, 15),
                     "value": current_value,
                     "region": region,
                     "previous_value": previous_value
@@ -248,7 +248,7 @@ def load_data_to_db():
     
     for ticker in tickers:
         for _ in range(20):  # 20 trades per ticker
-            trade_date = datetime(2024, np.random.randint(1, 5), np.random.randint(1, 29))
+            trade_date = datetime(2025, np.random.randint(1, 5), np.random.randint(1, 29))
             price = 0
             
             # Set price ranges based on ticker
@@ -555,15 +555,15 @@ test_prompts = [
     "Which ticker has the most negative position?",
     "What's the average PnL for trades in the Materials sector?",
     "How does commodity exposure correlate with PnL across different sectors?",
-    "What was the trend of oil prices in the first quarter of 2024?",
-    "Which region had the highest interest rates in March 2024?",
+    "What was the trend of oil prices in the first quarter of 2025?",
+    "Which region had the highest interest rates in March 2025?",
     "What is the distribution of trade sizes for NVDA?",
-    "How have gold prices changed month-over-month in 2024?",
+    "How have gold prices changed month-over-month in 2025?",
     "Compare the performance of the Macro Alpha and Tech Sector model groups",
     "What's the total position value by sector?",
     "Which model has the most consistent alpha score?",
     "Is there a correlation between interest rates and financial sector performance?",
-    "What was the average buy price for Apple stock in Q1 2024?",
+    "What was the average buy price for Apple stock in Q1 2025?",
     "How does consumer confidence relate to position sizes in Consumer Discretionary stocks?",
     "Which commodity-related tickers have the highest volatility?",
     "What is the trend in inflation rates across different regions?",
