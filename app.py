@@ -21,88 +21,125 @@ DB_PATH = os.path.join(tempfile.gettempdir(), "finance_data.db")
 
 def init_db():
     """Initialize SQLite database and create tables if they don't exist"""
-    # Check if database file exists, and if so, delete it to ensure a fresh schema
-    if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
-        
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
     
-    # Create trades table (original)
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS trades (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ticker TEXT NOT NULL,
-        model_group TEXT NOT NULL,
-        timestamp TIMESTAMP NOT NULL,
-        position REAL NOT NULL,
-        pnl REAL NOT NULL,
-        alpha_score REAL NOT NULL,
-        volatility REAL NOT NULL,
-        sector TEXT,
-        asset_class TEXT
-    )
-    ''')
+    # Let's try to use multiple possible locations
+    possible_paths = [
+        os.path.join(tempfile.gettempdir(), "finance_data.db"),  # Temp directory
+        os.path.join(os.path.expanduser("~"), "finance_data.db"),  # Home directory
+        "finance_data.db"  # Current directory (original)
+    ]
     
-    # Create commodities table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS commodities (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        commodity_name TEXT NOT NULL,
-        ticker TEXT NOT NULL,
-        timestamp TIMESTAMP NOT NULL,
-        price REAL NOT NULL,
-        volume INTEGER,
-        change_pct REAL,
-        inventory_level REAL,
-        category TEXT
-    )
-    ''')
-    
-    # Create interest_rates table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS interest_rates (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        rate_name TEXT NOT NULL,
-        country TEXT NOT NULL,
-        timestamp TIMESTAMP NOT NULL,
-        rate_value REAL NOT NULL,
-        previous_value REAL,
-        term TEXT,
-        is_central_bank BOOLEAN
-    )
-    ''')
-    
-    # Create real_estate table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS real_estate (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        property_type TEXT NOT NULL,
-        region TEXT NOT NULL,
-        timestamp TIMESTAMP NOT NULL,
-        price_index REAL NOT NULL,
-        yoy_change_pct REAL,
-        inventory_level INTEGER,
-        avg_days_on_market INTEGER
-    )
-    ''')
-    
-    # Create economic_indicators table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS economic_indicators (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        indicator_name TEXT NOT NULL,
-        country TEXT NOT NULL,
-        timestamp TIMESTAMP NOT NULL,
-        value REAL NOT NULL,
-        previous_value REAL,
-        unit TEXT,
-        frequency TEXT
-    )
-    ''')
-    
-    conn.commit()
-    conn.close()
+    # Try each location until one works
+    for path in possible_paths:
+        try:
+            # Print the path we're trying
+            print(f"Attempting to create database at: {path}")
+            
+            # Remove if exists
+            if os.path.exists(path):
+                print(f"Removing existing database at {path}")
+                os.remove(path)
+                
+            # Try to create and open the database
+            conn = sqlite3.connect(path)
+            cursor = conn.cursor()
+            
+            # Test write access with a simple query
+            cursor.execute("CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY)")
+            conn.commit()
+            
+            print(f"Success! Using database at: {path}")
+            
+            # If we get here, we've found a working path
+            global DB_PATH
+            DB_PATH = path
+            
+            # Continue with your original table creation
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS trades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker TEXT NOT NULL,
+                model_group TEXT NOT NULL,
+                timestamp TIMESTAMP NOT NULL,
+                position REAL NOT NULL,
+                pnl REAL NOT NULL,
+                alpha_score REAL NOT NULL,
+                volatility REAL NOT NULL,
+                sector TEXT,
+                asset_class TEXT
+            )
+            ''')
+            
+            # Create commodities table
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS commodities (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                commodity_name TEXT NOT NULL,
+                ticker TEXT NOT NULL,
+                timestamp TIMESTAMP NOT NULL,
+                price REAL NOT NULL,
+                volume INTEGER,
+                change_pct REAL,
+                inventory_level REAL,
+                category TEXT
+            )
+            ''')
+            
+            # Create interest_rates table
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS interest_rates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rate_name TEXT NOT NULL,
+                country TEXT NOT NULL,
+                timestamp TIMESTAMP NOT NULL,
+                rate_value REAL NOT NULL,
+                previous_value REAL,
+                term TEXT,
+                is_central_bank BOOLEAN
+            )
+            ''')
+            
+            # Create real_estate table
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS real_estate (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                property_type TEXT NOT NULL,
+                region TEXT NOT NULL,
+                timestamp TIMESTAMP NOT NULL,
+                price_index REAL NOT NULL,
+                yoy_change_pct REAL,
+                inventory_level INTEGER,
+                avg_days_on_market INTEGER
+            )
+            ''')
+            
+            # Create economic_indicators table
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS economic_indicators (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                indicator_name TEXT NOT NULL,
+                country TEXT NOT NULL,
+                timestamp TIMESTAMP NOT NULL,
+                value REAL NOT NULL,
+                previous_value REAL,
+                unit TEXT,
+                frequency TEXT
+            )
+            ''')
+            
+            conn.commit()
+            conn.close()
+            
+            # Success - break out of the loop
+            break
+            
+        except Exception as e:
+            print(f"Error with path {path}: {str(e)}")
+            continue
+    else:
+        # If we get here, none of the paths worked
+        st.error("Could not initialize database. Please check permissions and disk space.")
+        raise Exception("Failed to initialize database after trying multiple locations")
 
 def db_is_empty():
     """Check if database is empty"""
