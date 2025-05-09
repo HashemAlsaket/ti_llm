@@ -288,6 +288,9 @@ def get_data_from_db(ticker="All", model_group="All"):
                 "The query should be well-optimized and follow best practices. "
                 "All SQL queries must conform to SQLite3 syntax. Do not use MySQL, PostgreSQL, or other dialect-specific functions (e.g., DATE_SUB, INTERVAL, NOW()). Use SQLite functions such as date('now', '-5 months'), strftime(), and CURRENT_TIMESTAMP."
                 "Return ONLY the SQLLite3 query, with no additional explanation."
+                """E.G. -- Valid SQLite date manipulation
+SELECT * FROM stock_data
+WHERE timestamp >= date('now', '-6 months');"""
             )),
             ("human", """
             Database Schema:
