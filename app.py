@@ -20,7 +20,7 @@ from langchain_community.utilities import SQLDatabase
 import logging
 
 # --- SETUP ---
-st.set_page_config(page_title="TI LLM Agent", layout="wide")
+st.set_page_config(page_title="Tudor LLM Agent", layout="wide")
 
 # --- CUSTOM THEME ---
 # Define Tudor Investment theme colors based on logo
