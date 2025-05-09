@@ -101,6 +101,24 @@ def get_data_from_db(ticker="All", model_group="All"):
     conn.close()
     return df
 
+def get_detailed_db_schema():
+    """Get a detailed database schema description for better LLM context"""
+    schema = """
+Table: trades
+Description: This table contains financial trading data for various stock tickers across different trading models.
+
+Columns:
+* id (INTEGER) # Unique identifier for each trade record
+* ticker (TEXT) # Stock ticker symbol (e.g., AAPL, MSFT, GOOG) representing the company being traded
+* model_group (TEXT) # The trading strategy or model used for the trade (e.g., Macro Alpha, Q1 Equity)
+* timestamp (TIMESTAMP) # Date and time when the trade was executed or recorded
+* position (REAL) # Current position size in dollars; positive values indicate long positions, negative values indicate short positions
+* pnl (REAL) # Profit and Loss in dollars; indicates how much profit (positive) or loss (negative) the position has generated
+* alpha_score (REAL) # A score measuring the excess return of the investment relative to a benchmark; higher values indicate better performance
+* volatility (REAL) # A measure of the price variation/risk of the position; higher values indicate more volatile/risky positions
+"""
+    return schema
+
 def get_db_schema():
     """Get the database schema as a string"""
     conn = sqlite3.connect(DB_PATH)
@@ -173,8 +191,13 @@ db = SQLDatabase.from_uri(db_url)
 # --- LLM QUERY FUNCTIONS ---
 def ask_direct_llm(prompt, context):
     """Legacy direct LLM query method"""
+    # Include detailed schema for better context
+    detailed_schema = get_detailed_db_schema()
+    
     system_prompt = (
         "You are a financial analyst assistant for Tudor Investments. "
+        "Answer questions using the following database schema and data context.\n\n"
+        f"Database Schema:\n{detailed_schema}\n\n"
         "Answer questions using the following data context."
     )
 
@@ -191,13 +214,26 @@ def ask_direct_llm(prompt, context):
 
 def ask_sql_llm(prompt):
     """Use LangChain to convert natural language to SQL and execute"""
-    # Get DB schema
-    schema = get_db_schema()
+    # Get detailed schema for better SQL generation
+    schema = get_detailed_db_schema()
+    
+    # Define an enhanced SQL generation prompt that includes the detailed schema
+    sql_generation_prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content=(
+            "You are a financial database expert at Tudor Investments. "
+            "Your job is to convert user questions into correct SQL queries based on the database schema below.\n\n"
+            f"{schema}\n\n"
+            "Generate only the SQL query without any explanation. The query should be syntactically correct for SQLite."
+            "Think step by step about how to join tables if needed, and ensure all column names are correct."
+        )),
+        ("human", "{question}")
+    ])
     
     # Create a chain that generates SQL
     sql_chain = create_sql_query_chain(
         langchain_llm,
         db,
+        prompt=sql_generation_prompt,
         k=3  # Number of examples used for few-shot prompting
     )
     
@@ -215,7 +251,8 @@ def ask_sql_llm(prompt):
             SystemMessage(content=(
                 "You are a financial analyst assistant for Tudor Investments. "
                 "Explain the following SQL query and its results in a clear, concise way. "
-                "Focus on the business insights and implications."
+                "Focus on the business insights and implications.\n\n"
+                f"Database Schema:\n{schema}"
             )),
             ("human", "SQL Query: {query}\n\nResults: {results}\n\nUser question: {question}")
         ])
@@ -240,6 +277,9 @@ def ask_sql_llm(prompt):
 
 def ask_enhanced_sql_llm(prompt, filtered_df):
     """Enhanced SQL-based approach with better context"""
+    # Get detailed schema
+    schema = get_detailed_db_schema()
+    
     # Try SQL approach
     sql_response = ask_sql_llm(prompt)
     
@@ -247,8 +287,9 @@ def ask_enhanced_sql_llm(prompt, filtered_df):
     combined_prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content=(
             "You are a sophisticated financial analyst assistant for Tudor Investments. "
-            "Provide a comprehensive answer to the user's question using the SQL query results "
-            "and the current filtered data context."
+            "Provide a comprehensive answer to the user's question using the SQL query results, "
+            "the current filtered data context, and the database schema.\n\n"
+            f"Database Schema:\n{schema}"
         )),
         ("human", """
         User question: {question}
@@ -258,11 +299,21 @@ def ask_enhanced_sql_llm(prompt, filtered_df):
         
         Current Filtered Data Summary:
         {filtered_data_summary}
+        
+        Please provide a comprehensive answer that addresses the user's question directly.
+        Include specific numbers and insights from the data where relevant.
+        If appropriate, suggest follow-up analyses that might provide additional insights.
         """)
     ])
     
     # Create a summary of the filtered data
     filtered_summary = f"Current filter: Ticker={ticker}, Model Group={model}"
+    if ticker != "All" or model != "All":
+        filtered_summary += f"\nFiltered dataset contains {len(filtered_df)} records."
+        filtered_summary += f"\nSummary statistics for filtered data:"
+        filtered_summary += f"\n- Total PnL: ${filtered_df['pnl'].sum():,.2f}"
+        filtered_summary += f"\n- Average position size: ${filtered_df['position'].mean():,.2f}"
+        filtered_summary += f"\n- Average alpha score: {filtered_df['alpha_score'].mean():.4f}"
     
     if "error" in sql_response:
         sql_results_text = f"SQL Error: {sql_response['error']}"
@@ -309,12 +360,14 @@ st.sidebar.markdown("<p class='section-header'>❓ Sample Questions</p>", unsafe
 sample_questions = [
     "Which model group has the highest total PnL?",
     "What is the relationship between alpha score and volatility?",
-    "Show me the performance of technology stocks compared to energy stocks",
+    "Compare the average position size across different tickers",
     "Which ticker has the most negative position?",
-    "What's the average PnL for trades in the Materials sector?",
-    "How does position size correlate with alpha score?",
-    "Which model group is the most consistent in terms of volatility?",
-    "Summarize the overall performance by ticker"
+    "Show me the trading performance by model group",
+    "Calculate the correlation between position size and PnL",
+    "Which model has the highest average alpha score?",
+    "What is the distribution of volatility values across different tickers?",
+    "Compare the PnL performance of AAPL vs MSFT",
+    "Show me the model groups with positive average PnL"
 ]
 selected_question = st.sidebar.selectbox("Try a sample question:", [""] + sample_questions)
 
@@ -334,6 +387,10 @@ col1, col2, col3 = st.columns(3)
 col1.metric("Total PnL", f"${total_pnl:,.0f}")
 col2.metric("Net Position", f"${total_position:,.0f}")
 col3.metric("Avg Alpha Score", f"{avg_alpha:.2f}")
+
+# --- SCHEMA DISPLAY ---
+with st.expander("View Database Schema"):
+    st.code(get_detailed_db_schema(), language="markdown")
 
 # --- LLM QUERY INTERFACE ---
 st.markdown("<p class='section-header'>🤖 Ask a Question</p>", unsafe_allow_html=True)
