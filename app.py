@@ -16,7 +16,8 @@ from langchain_community.utilities import SQLDatabase
 st.set_page_config(page_title="TI LLM Agent", layout="wide")
 
 # --- DATABASE SETUP ---
-DB_PATH = "finance_data.db"
+import tempfile
+DB_PATH = os.path.join(tempfile.gettempdir(), "finance_data.db")
 
 def init_db():
     """Initialize SQLite database and create tables if they don't exist"""
