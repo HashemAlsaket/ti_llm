@@ -349,7 +349,7 @@ def login():
     st.session_state["authenticated"] = False
 
     with st.form("Login"):
-        st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
+        # st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
         st.write("🔐 Please log in to continue")
         user = st.text_input("Username")
         pw = st.text_input("Password", type="password")
@@ -367,8 +367,8 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
 
 # --- HEADER WITH LOGO ---
 col1, col2 = st.columns([1, 5])
-with col1:
-    st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
+# with col1:
+#     st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
 with col2:
     st.title("📊 TI LLM Agent Prototype")
 
@@ -492,7 +492,7 @@ def execute_sql_query(prompt, thinking_container):
         }
 
 # --- SIDEBAR FILTERS ---
-st.sidebar.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=80)
+# st.sidebar.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=80)
 st.sidebar.header("🔍 Filter Trades")
 ticker_options = ["All"]
 model_options = ["All"]
