@@ -301,27 +301,61 @@ def load_data_to_db():
     return trades_df
 
 def get_data_from_db(ticker="All", model_group="All"):
-    """Fetch data from SQLite database with optional filters"""
-    conn = sqlite3.connect(DB_PATH)
-    
-    query = "SELECT * FROM trades"
-    params = []
-    
-    # Add filters if specified
-    where_clauses = []
-    if ticker != "All":
-        where_clauses.append("ticker = ?")
-        params.append(ticker)
-    if model_group != "All":
-        where_clauses.append("model_group = ?")
-        params.append(model_group)
-    
-    if where_clauses:
-        query += " WHERE " + " AND ".join(where_clauses)
-    
-    df = pd.read_sql(query, conn, params=params)
-    conn.close()
-    return df
+   """Fetch data from SQLite database with optional filters using LLM-generated SQL"""
+   conn = sqlite3.connect(DB_PATH)
+   
+   # Build natural language description of the query based on filters
+   query_description = "Get all trades"
+   filter_descriptions = []
+   
+   if ticker != "All":
+       filter_descriptions.append(f"ticker is {ticker}")
+   if model_group != "All":
+       filter_descriptions.append(f"model group is {model_group}")
+   
+   if filter_descriptions:
+       query_description += " where " + " and ".join(filter_descriptions)
+   
+   try:
+       # Get DB schema for context
+       schema = get_db_schema()
+       
+       # Use the LLM to generate SQL via LangChain
+       sql_chain = create_sql_query_chain(
+           langchain_llm,
+           db,
+           k=2  # Number of examples used for few-shot prompting
+       )
+       
+       # Generate the SQL query
+       sql_query = sql_chain.invoke({"question": query_description})
+       
+       # Execute the query
+       df = pd.read_sql(sql_query, conn)
+       
+   except Exception as e:
+       # Fallback to manual query construction if LLM query fails
+       print(f"LLM query generation failed: {e}. Using fallback query.")
+       
+       query = "SELECT * FROM trades"
+       params = []
+       
+       # Add filters if specified
+       where_clauses = []
+       if ticker != "All":
+           where_clauses.append("ticker = ?")
+           params.append(ticker)
+       if model_group != "All":
+           where_clauses.append("model_group = ?")
+           params.append(model_group)
+       
+       if where_clauses:
+           query += " WHERE " + " AND ".join(where_clauses)
+       
+       df = pd.read_sql(query, conn, params=params)
+   
+   conn.close()
+   return df
 
 def get_db_schema():
     """Get the database schema as a string"""
