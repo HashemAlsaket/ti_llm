@@ -615,7 +615,7 @@ st.markdown("""
 st.dataframe(filtered_df, use_container_width=True)
 
 # --- SUMMARY METRICS ---
-total_pnl = filtered_df['pnl'].sum()
+# total_pnl = filtered_df['pnl'].sum()
 total_position = filtered_df['position'].sum()
 avg_alpha = filtered_df['alpha_score'].mean()
 
