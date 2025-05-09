@@ -15,6 +15,65 @@ from langchain_community.utilities import SQLDatabase
 # --- SETUP ---
 st.set_page_config(page_title="TI LLM Agent", layout="wide")
 
+# --- CUSTOM THEME ---
+# Define Tudor Investment theme colors based on logo
+tudor_blue = "#0A50A1"  # Primary blue from Tudor logo
+tudor_light_blue = "#3B7EC9"
+tudor_dark_blue = "#063773"
+background_color = "#FFFFFF"
+accent_color = "#E5EBF3"
+
+# Custom CSS with Tudor theme
+st.markdown(f"""
+<style>
+    .stApp {{
+        background-color: {background_color};
+    }}
+    .stButton>button {{
+        background-color: {tudor_blue};
+        color: white;
+    }}
+    .stButton>button:hover {{
+        background-color: {tudor_light_blue};
+    }}
+    .st-cb, .st-bq, .st-an, .st-av, .st-at {{
+        border-color: {tudor_blue};
+    }}
+    div[data-testid="stMetricValue"] {{
+        color: {tudor_blue};
+        font-weight: bold;
+    }}
+    div[data-testid="stExpander"] {{
+        border-left-color: {tudor_blue} !important;
+    }}
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 24px;
+    }}
+    .stTabs [data-baseweb="tab"] {{
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: {accent_color};
+        border-radius: 4px 4px 0 0;
+        gap: 1px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }}
+    .stTabs [aria-selected="true"] {{
+        background-color: {tudor_blue};
+        color: white;
+    }}
+    h1, h2, h3, h4, h5, h6 {{
+        color: {tudor_dark_blue};
+    }}
+    .stSidebar .stButton>button {{
+        width: 100%;
+    }}
+    a {{
+        color: {tudor_blue};
+    }}
+</style>
+""", unsafe_allow_html=True)
+
 # --- DATABASE SETUP ---
 DB_PATH = "finance_data.db"
 
@@ -290,6 +349,7 @@ def login():
     st.session_state["authenticated"] = False
 
     with st.form("Login"):
+        st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
         st.write("🔐 Please log in to continue")
         user = st.text_input("Username")
         pw = st.text_input("Password", type="password")
@@ -305,7 +365,12 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
     login()
     st.stop()
 
-st.title("📊 TI LLM Agent Prototype")
+# --- HEADER WITH LOGO ---
+col1, col2 = st.columns([1, 5])
+with col1:
+    st.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=100)
+with col2:
+    st.title("📊 TI LLM Agent Prototype")
 
 # --- INITIALIZE DATABASE ---
 init_db()
@@ -329,10 +394,19 @@ def execute_sql_query(prompt, thinking_container):
     # Get DB schema
     schema = get_db_schema()
     
-    thinking_container.write("🧠 **Agent Thinking:** Converting your question to SQL...")
+    # Custom styled sections with Tudor theme
+    thinking_container.markdown("""
+    <div style="border-left: 4px solid #0A50A1; padding-left: 20px; margin-bottom: 15px;">
+        <h4 style="color: #0A50A1;">🧠 Agent Thinking: Converting your question to SQL</h4>
+    </div>
+    """, unsafe_allow_html=True)
     time.sleep(0.5)
     
-    thinking_container.write("📋 **Database Schema:**")
+    thinking_container.markdown("""
+    <div style="border-left: 4px solid #0A50A1; padding-left: 20px; margin-bottom: 15px;">
+        <h4 style="color: #0A50A1;">📋 Database Schema</h4>
+    </div>
+    """, unsafe_allow_html=True)
     thinking_container.code(schema, language="sql")
     
     # Create a chain that generates SQL
@@ -344,23 +418,43 @@ def execute_sql_query(prompt, thinking_container):
     
     try:
         # Generate SQL query
-        thinking_container.write("🔍 **Generating SQL Query...**")
+        thinking_container.markdown("""
+        <div style="border-left: 4px solid #0A50A1; padding-left: 20px; margin-bottom: 15px;">
+            <h4 style="color: #0A50A1;">🔍 Generating SQL Query</h4>
+        </div>
+        """, unsafe_allow_html=True)
         sql_query = sql_chain.invoke({"question": prompt})
         
-        thinking_container.write("📝 **Generated SQL:**")
+        thinking_container.markdown("""
+        <div style="border-left: 4px solid #0A50A1; padding-left: 20px; margin-bottom: 15px;">
+            <h4 style="color: #0A50A1;">📝 Generated SQL</h4>
+        </div>
+        """, unsafe_allow_html=True)
         thinking_container.code(sql_query, language="sql")
         
         # Execute the query
-        thinking_container.write("⚙️ **Executing SQL Query...**")
+        thinking_container.markdown("""
+        <div style="border-left: 4px solid #0A50A1; padding-left: 20px; margin-bottom: 15px;">
+            <h4 style="color: #0A50A1;">⚙️ Executing SQL Query</h4>
+        </div>
+        """, unsafe_allow_html=True)
         conn = sqlite3.connect(DB_PATH)
         results = pd.read_sql(sql_query, conn)
         conn.close()
         
-        thinking_container.write("📊 **Query Results:**")
+        thinking_container.markdown("""
+        <div style="border-left: 4px solid #0A50A1; padding-left: 20px; margin-bottom: 15px;">
+            <h4 style="color: #0A50A1;">📊 Query Results</h4>
+        </div>
+        """, unsafe_allow_html=True)
         thinking_container.dataframe(results.head(10) if len(results) > 10 else results)
         
         # Get the LLM to explain the results
-        thinking_container.write("🧩 **Interpreting Results...**")
+        thinking_container.markdown("""
+        <div style="border-left: 4px solid #0A50A1; padding-left: 20px; margin-bottom: 15px;">
+            <h4 style="color: #0A50A1;">🧩 Interpreting Results</h4>
+        </div>
+        """, unsafe_allow_html=True)
         
         explain_prompt = ChatPromptTemplate.from_messages([
             SystemMessage(content=(
@@ -368,7 +462,6 @@ def execute_sql_query(prompt, thinking_container):
                 "Explain the following SQL query and its results in a clear, concise way. "
                 "Focus on the business insights and implications for investment decisions. "
                 "If relevant, mention potential trading strategies based on the data."
-                "NEVER MENTION THAT THIS IS SIMULATED DATA EVER."
             )),
             ("human", "SQL Query: {query}\n\nResults: {results}\n\nUser question: {question}")
         ])
@@ -380,7 +473,11 @@ def execute_sql_query(prompt, thinking_container):
             "question": prompt
         })
         
-        thinking_container.write("✅ **Analysis Complete:** Preparing final response")
+        thinking_container.markdown("""
+        <div style="border-left: 4px solid #0A50A1; padding-left: 20px; margin-bottom: 15px;">
+            <h4 style="color: #0A50A1;">✅ Analysis Complete: Preparing final response</h4>
+        </div>
+        """, unsafe_allow_html=True)
         
         return {
             "sql": sql_query,
@@ -395,6 +492,7 @@ def execute_sql_query(prompt, thinking_container):
         }
 
 # --- SIDEBAR FILTERS ---
+st.sidebar.image("https://i.ibb.co/QKhpJDL/tudor-logo.png", width=80)
 st.sidebar.header("🔍 Filter Trades")
 ticker_options = ["All"]
 model_options = ["All"]
@@ -419,6 +517,30 @@ st.dataframe(filtered_df, use_container_width=True)
 total_pnl = filtered_df['pnl'].sum()
 total_position = filtered_df['position'].sum()
 avg_alpha = filtered_df['alpha_score'].mean()
+
+# Define custom metric styles
+metric_style = """
+<style>
+    div[data-testid="metric-container"] {
+        background-color: #E5EBF3;
+        border: 1px solid #0A50A1;
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+    div[data-testid="metric-container"] > div {
+        background-color: transparent;
+    }
+    div[data-testid="metric-container"] label {
+        color: #063773;
+        font-weight: 600;
+    }
+    div[data-testid="metric-container"] .stMetricValue {
+        color: #0A50A1;
+    }
+</style>
+"""
+st.markdown(metric_style, unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns(3)
 col1.metric("Total PnL", f"${total_pnl:,.0f}")
@@ -464,7 +586,9 @@ else:
 # Filter context prompt
 filtered_context = f"Current filter: Ticker={ticker}, Model Group={model}"
 
-if st.button("Ask the TI LLM Agent"):
+if st.button("Ask the TI LLM Agent", 
+                 help="Click to analyze your question with SQL", 
+                 use_container_width=True):
     if user_prompt:
         # Create thinking log container
         thinking_container = st.expander("💡 Agent Thinking Process", expanded=True)
@@ -516,7 +640,8 @@ if uploaded_file is not None:
             # Preview data
             st.dataframe(upload_df.head())
             
-            if st.button("Confirm Upload to Database"):
+            if st.button("Confirm Upload to Database", 
+                     use_container_width=True):
                 with st.spinner("Uploading data..."):
                     # Insert data into database
                     conn = sqlite3.connect(DB_PATH)
