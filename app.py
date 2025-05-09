@@ -142,7 +142,16 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
     login()
     st.stop()
 
-st.title("📊 TI LLM Agent Prototype")
+# Add simple Tudor branding
+st.markdown("""
+<style>
+    .main-header {color: #0F4B81; font-size: 26px; font-weight: bold;}
+    .section-header {color: #0F4B81; font-size: 20px;}
+    .stButton>button {background-color: #0F4B81; color: white;}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("<p class='main-header'>📊 Tudor Investments LLM Agent</p>", unsafe_allow_html=True)
 
 # --- INITIALIZE DATABASE ---
 init_db()
@@ -274,7 +283,7 @@ def ask_enhanced_sql_llm(prompt, filtered_df):
     }
 
 # --- SIDEBAR FILTERS ---
-st.sidebar.header("🔍 Filter Trades")
+st.sidebar.markdown("<p class='section-header'>🔍 Filter Trades</p>", unsafe_allow_html=True)
 ticker_options = ["All"]
 model_options = ["All"]
 
@@ -288,17 +297,32 @@ ticker = st.sidebar.selectbox("Select Ticker", ticker_options)
 model = st.sidebar.selectbox("Select Model Group", model_options)
 
 # --- QUERY APPROACH SELECTION ---
+st.sidebar.markdown("<p class='section-header'>💡 Query Method</p>", unsafe_allow_html=True)
 query_method = st.sidebar.radio(
     "LLM Query Method",
     ["Simple (Direct)", "SQL-Based", "Enhanced SQL"],
     help="Choose how the LLM will process your query"
 )
 
+# --- SAMPLE QUESTIONS ---
+st.sidebar.markdown("<p class='section-header'>❓ Sample Questions</p>", unsafe_allow_html=True)
+sample_questions = [
+    "Which model group has the highest total PnL?",
+    "What is the relationship between alpha score and volatility?",
+    "Show me the performance of technology stocks compared to energy stocks",
+    "Which ticker has the most negative position?",
+    "What's the average PnL for trades in the Materials sector?",
+    "How does position size correlate with alpha score?",
+    "Which model group is the most consistent in terms of volatility?",
+    "Summarize the overall performance by ticker"
+]
+selected_question = st.sidebar.selectbox("Try a sample question:", [""] + sample_questions)
+
 # --- GET FILTERED DATA ---
 filtered_df = get_data_from_db(ticker, model)
 
 # --- DISPLAY DATA ---
-st.subheader("🔁 Trade Data")
+st.markdown("<p class='section-header'>🔁 Trade Data</p>", unsafe_allow_html=True)
 st.dataframe(filtered_df, use_container_width=True)
 
 # --- SUMMARY METRICS ---
@@ -312,17 +336,25 @@ col2.metric("Net Position", f"${total_position:,.0f}")
 col3.metric("Avg Alpha Score", f"{avg_alpha:.2f}")
 
 # --- LLM QUERY INTERFACE ---
-st.subheader("🤖 Ask a Question")
-user_prompt = st.text_area("What would you like to know about this trading data?", 
-                          placeholder="Example: Which model group has the highest PnL?")
+st.markdown("<p class='section-header'>🤖 Ask a Question</p>", unsafe_allow_html=True)
 
-if st.button("Ask the TI LLM Agent"):
+# Use the selected sample question if one is chosen
+if selected_question:
+    user_prompt = st.text_area("What would you like to know about this trading data?", 
+                             value=selected_question,
+                             placeholder="Example: Which model group has the highest PnL?")
+else:
+    user_prompt = st.text_area("What would you like to know about this trading data?", 
+                             placeholder="Example: Which model group has the highest PnL?")
+
+if st.button("Ask the Tudor LLM Agent"):
     if user_prompt:
         with st.spinner("Processing your question..."):
             if query_method == "Simple (Direct)":
                 # Use the original direct approach
                 sample_data = filtered_df.head(10).to_dict(orient="records")
-                context_text = str(sample_data)
+                # Convert to string with better formatting to avoid JSON errors
+                context_text = str(sample_data).replace("'", '"')
                 answer = ask_direct_llm(user_prompt, context_text)
                 
                 st.success("LLM Response:")
@@ -364,7 +396,7 @@ if st.button("Ask the TI LLM Agent"):
         st.warning("Please enter a question.")
 
 # --- ADD DATA UPLOAD FUNCTIONALITY ---
-st.subheader("📤 Upload Additional Data")
+st.markdown("<p class='section-header'>📤 Upload Additional Data</p>", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("Upload CSV file with trading data", type=["csv"])
 if uploaded_file is not None:
